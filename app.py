@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Koli İçi ve Palet 2B/3B Görselleştirmeli)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Güvenli Palet Boyut Kontrollü)
 """
 
 import streamlit as st
@@ -175,6 +175,19 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
             }
     if best_h and best_h["count"] > max(c1, c2):
         patterns.append(best_h)
+
+    # Eğer koli paletten büyükse (0 sığıyorsa) çökmemesi için tek koli yerleşimi fallback ekle
+    if not patterns:
+        patterns.append({
+            "name": "Koli Paletten Büyük (Taşmalı Yerleşim)",
+            "count": 1,
+            "efficiency": (box_l * box_w) / (pallet_l * pallet_w) * 100,
+            "type": "align_l",
+            "nx": 1,
+            "ny": 1,
+            "desc": "1x1 (Paletten Taşma Var)"
+        })
+
     patterns.sort(key=lambda x: (x["count"], x["efficiency"]), reverse=True)
     return patterns
 
@@ -190,10 +203,8 @@ def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     return go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, color=color, opacity=opacity, flatshading=True, showlegend=False)
 
 def draw_2d_box_contents(box_in_l, box_in_w, p_len, p_wid, nx, ny):
-    """Koli içi ürün taban yerleşim krokisi (2B)"""
     fig = go.Figure()
     fig.add_shape(type="rect", x0=0, y0=0, x1=box_in_l, y1=box_in_w, line=dict(color="#8c564b", width=3), fillcolor="#fbf0e4", opacity=0.5)
-    
     cnt = 1
     for i in range(nx):
         for j in range(ny):
@@ -212,11 +223,8 @@ def draw_2d_box_contents(box_in_l, box_in_w, p_len, p_wid, nx, ny):
     return fig
 
 def draw_3d_box_contents(box_in_l, box_in_w, box_in_h, p_len, p_wid, p_h, nx, ny, nz):
-    """Koli içi ürün yerleşim simülasyonu (3B)"""
     fig = go.Figure()
-    # Koli Şeffaf Dış Hatları
     fig.add_trace(create_box_mesh(0, 0, 0, box_in_l, box_in_w, box_in_h, color="#8c564b", opacity=0.15))
-    
     for k in range(nz):
         z0 = k * p_h
         col = "#31a354" if k % 2 == 0 else "#74c476"
@@ -265,8 +273,8 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
         fig.add_annotation(x=bx + bw/2, y=by + bh/2, text=str(idx+1), showarrow=False, font=dict(size=10, color="white"))
     fig.update_layout(
         title=f"Palet Kat Planı (2B) - {pattern['count']} Koli/Kat",
-        xaxis=dict(title="Boy (mm)", range=[-50, pallet_l + 50], scaleratio=1),
-        yaxis=dict(title="En (mm)", range=[-50, pallet_w + 50], scaleratio=1),
+        xaxis=dict(title="Boy (mm)", range=[-50, max(pallet_l, box_l) + 50], scaleratio=1),
+        yaxis=dict(title="En (mm)", range=[-50, max(pallet_w, box_w) + 50], scaleratio=1),
         height=380, margin=dict(l=10, r=10, t=35, b=10)
     )
     return fig
@@ -291,8 +299,8 @@ def draw_2d_vehicle_layout(v_len, v_wid, is_palletized, p_len, p_wid, b_len, b_w
     fig = go.Figure()
     fig.add_shape(type="rect", x0=0, y0=0, x1=v_len, y1=v_wid, line=dict(color="#333", width=3), fillcolor="#eceff1", opacity=0.5)
     if is_palletized:
-        cols = int(v_len // p_len)
-        rows = int(v_wid // p_wid)
+        cols = max(1, int(v_len // p_len))
+        rows = max(1, int(v_wid // p_wid))
         idx = 1
         for i in range(cols):
             for j in range(rows):
@@ -302,8 +310,8 @@ def draw_2d_vehicle_layout(v_len, v_wid, is_palletized, p_len, p_wid, b_len, b_w
                     fig.add_annotation(x=bx+p_len/2, y=by+p_wid/2, text=f"P{idx}", showarrow=False, font=dict(size=9, color="black"))
                     idx += 1
     else:
-        cols = int(v_len // b_len)
-        rows = int(v_wid // b_wid)
+        cols = max(1, int(v_len // b_len))
+        rows = max(1, int(v_wid // b_wid))
         for i in range(min(cols, 25)):
             for j in range(rows):
                 bx, by = i * b_len, j * b_wid
@@ -321,8 +329,8 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
     fig = go.Figure()
     fig.add_trace(create_box_mesh(0, 0, 0, v_len, v_wid, v_h, color="#90a4ae", opacity=0.15))
     if is_palletized:
-        cols = int(v_len // p_len)
-        rows = int(v_wid // p_wid)
+        cols = max(1, int(v_len // p_len))
+        rows = max(1, int(v_wid // p_wid))
         stack_layers = 2 if double_stack else 1
         cnt = 0
         for i in range(cols):
@@ -332,9 +340,9 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
                         fig.add_trace(create_box_mesh(i * p_len, j * p_wid, s * p_total_h, p_len, p_wid, p_total_h - 10, color="#f57c00" if s==0 else "#e65100", opacity=0.75))
                         cnt += 1
     else:
-        cols = int(v_len // b_len)
-        rows = int(v_wid // b_wid)
-        levels = int(v_h // b_h)
+        cols = max(1, int(v_len // b_len))
+        rows = max(1, int(v_wid // b_wid))
+        levels = max(1, int(v_h // b_h))
         step_c = max(1, cols // 15)
         for i in range(0, cols, step_c):
             for j in range(rows):
@@ -410,8 +418,8 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
     y_off = (height - vh) / 2
     d.add(Rect(x_off, y_off, vw, vh, fillColor=colors.HexColor('#eceff1'), strokeColor=colors.HexColor('#37474f'), strokeWidth=1.2))
     if is_pal:
-        cols = int(v_len // p_len)
-        rows = int(v_wid // p_wid)
+        cols = max(1, int(v_len // p_len))
+        rows = max(1, int(v_wid // p_wid))
         cnt = 1
         for i in range(cols):
             for j in range(rows):
@@ -445,8 +453,8 @@ def pdf_draw_vehicle_3d_iso(v_len, v_wid, v_h, p_len, p_wid, p_h, is_pal, total_
     d.add(Polygon([v[4][0], v[4][1], v[5][0], v[5][1], v[6][0], v[6][1], v[7][0], v[7][1]], fillColor=None, strokeColor=colors.HexColor('#78909c'), strokeWidth=0.8))
 
     if is_pal:
-        cols = int(v_len // p_len)
-        rows = int(v_wid // p_wid)
+        cols = max(1, int(v_len // p_len))
+        rows = max(1, int(v_wid // p_wid))
         st_layers = 2 if double_stack else 1
         cnt = 0
         for i in range(cols):
@@ -642,14 +650,14 @@ with st.sidebar:
     box_code_input = st.text_input("Koli Stok Kodu (SKU)", placeholder="Örn: KL-SL-500-01")
 
     st.header("1. Birincil Ürün Bilgileri")
-    p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=120.0, step=5.0)
-    p_width = st.number_input("Ürün Eni (Y - mm)", min_value=10.0, value=80.0, step=5.0)
+    p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=250.0, step=5.0)
+    p_width = st.number_input("Ürün Eni (Y - mm)", min_value=10.0, value=120.0, step=5.0)
     p_height = st.number_input("Ürün Yüksekliği (Z - mm)", min_value=10.0, value=150.0, step=5.0)
     p_weight = st.number_input("Ürün Brüt Ağırlığı (g)", min_value=1.0, value=450.0, step=10.0)
 
     st.header("2. Koli İçi Paketleme")
-    nx = st.number_input("X Yönünde Ürün", min_value=1, value=4, step=1)
-    ny = st.number_input("Y Yönünde Ürün", min_value=1, value=3, step=1)
+    nx = st.number_input("X Yönünde Ürün", min_value=1, value=5, step=1)
+    ny = st.number_input("Y Yönünde Ürün", min_value=1, value=1, step=1)
     nz = st.number_input("Z Yönünde Kat", min_value=1, value=2, step=1)
     total_units_box = int(nx * ny * nz)
 
@@ -789,7 +797,7 @@ loose_total_vol_m3 = total_loose_boxes * single_box_vol_m3
 loose_weight_util = (calc_loose_weight / v_info["max_payload_kg"]) * 100
 loose_vol_util = (loose_total_vol_m3 / vehicle_volume_m3) * 100
 
-extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
+extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100 if pallet_total_boxes > 0 else 0
 recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20 and not is_cold_storage) else "Paletli Yükleme"
 
 # PDF Paketi
@@ -963,10 +971,8 @@ if cur_step == 1:
 elif cur_step == 2:
     st.subheader("📦 2. Adım: Koli İçi ve Palet Yerleşim Simülasyonu")
     
-    # İki Alt Sekme (Koli İçi vs Palet Üstü)
     tab_koli, tab_palet = st.tabs(["📦 Koli İçi Ürün Dizilimi (2B / 3B)", "🏗️ Palet Üzeri Koli Dizilimi (2B / 3B)"])
 
-    # --- ALT SEKME 1: KOLİ İÇİ ÜRÜN DİZİLİMİ ---
     with tab_koli:
         ck1, ck2, ck3, ck4 = st.columns(4)
         ck1.metric("Koli İç Ölçüleri", f"{int(box_in_l)}x{int(box_in_w)}x{int(box_in_h)} mm")
@@ -995,8 +1001,10 @@ elif cur_step == 2:
                 fig_3d_box = draw_3d_box_contents(box_in_l, box_in_w, box_in_h, p_length, p_width, p_height, nx, ny, nz)
                 st.plotly_chart(fig_3d_box, use_container_width=True)
 
-    # --- ALT SEKME 2: PALET DİZİLİMİ ---
     with tab_palet:
+        if box_out_l > pallet_dim[0] and box_out_l > pallet_dim[1] and box_out_w > pallet_dim[0] and box_out_w > pallet_dim[1]:
+            st.warning("⚠️ **DİKKAT:** Koli boyutları palet taban ölçülerinden büyüktür! Lojistikte paletten taşma (overhang) riski oluşacaktır.")
+
         cp1, cp2, cp3, cp4 = st.columns(4)
         cp1.metric("Koli Dış Ölçüleri", f"{int(box_out_l)}x{int(box_out_w)}x{int(box_out_h)} mm")
         cp2.metric("Koli Brüt Ağırlık", f"{gross_box_kg:.2f} kg")
