@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (İnteraktif Görsel Navigasyonlu)
 """
 
 import streamlit as st
@@ -51,58 +51,81 @@ STORAGE_ENVIRONMENTS = {
         "temp_desc": "Mevsimsel Değişken (15°C - 35°C)",
         "base_temp_factor": 1.25,
         "default_rh": 70,
+        "is_cold": False,
         "desc": "Gece-gündüz yoğuşması ve kontrolsüz bağıl nem riski."
     },
     "+20°C Kontrollü Ortam (Klimalı Kuru Gıda Deposu)": {
         "temp_desc": "+18°C / +22°C Sabit",
         "base_temp_factor": 1.00,
         "default_rh": 55,
+        "is_cold": False,
         "desc": "Kuru gıda referans koşulu. Lif mukavemet kaybı düşüktür."
     },
     "+4°C Soğuk Hava Deposu (Taze / Süt / Şarküteri)": {
         "temp_desc": "+2°C / +6°C Soğuk Zincir",
         "base_temp_factor": 1.55,
         "default_rh": 85,
+        "is_cold": True,
         "desc": "Evaporatör nemi nedeniyle liflerde %35-50 yumuşama."
     },
     "-18°C Donuk Muhafaza (Deep Freeze)": {
         "temp_desc": "-18°C / -22°C Donuk Depo",
         "base_temp_factor": 1.35,
         "default_rh": 90,
+        "is_cold": True,
         "desc": "Lif kırılganlığı ve çıkışta yoğuşma (terleme) riski."
     }
 }
 
 VEHICLE_DATABASE = {
     "Standart Tır (13.60 m Tenteli / Mega)": {
-        "length": 13600, "width": 2480, "height": 2700, "max_payload_kg": 24000, "euro_pallets": 33, "std_pallets": 26
+        "length": 13600, "width": 2480, "height": 2700, "max_payload_kg": 24000, "euro_pallets": 33, "std_pallets": 26, "cold_chain": False
     },
     "Kırkayak / 10 Teker Kamyon (8.20 m)": {
-        "length": 8200, "width": 2450, "height": 2600, "max_payload_kg": 16000, "euro_pallets": 20, "std_pallets": 16
+        "length": 8200, "width": 2450, "height": 2600, "max_payload_kg": 16000, "euro_pallets": 20, "std_pallets": 16, "cold_chain": False
     },
     "6 Teker / Küçük Kamyon (6.20 m)": {
-        "length": 6200, "width": 2400, "height": 2400, "max_payload_kg": 8000, "euro_pallets": 15, "std_pallets": 12
+        "length": 6200, "width": 2400, "height": 2400, "max_payload_kg": 8000, "euro_pallets": 15, "std_pallets": 12, "cold_chain": False
     },
     "20' Standart Konteyner (20ft DC)": {
-        "length": 5898, "width": 2352, "height": 2393, "max_payload_kg": 21800, "euro_pallets": 11, "std_pallets": 10
+        "length": 5898, "width": 2352, "height": 2393, "max_payload_kg": 21800, "euro_pallets": 11, "std_pallets": 10, "cold_chain": False
     },
     "40' Standart Konteyner (40ft DC)": {
-        "length": 12032, "width": 2352, "height": 2393, "max_payload_kg": 26680, "euro_pallets": 25, "std_pallets": 21
+        "length": 12032, "width": 2352, "height": 2393, "max_payload_kg": 26680, "euro_pallets": 25, "std_pallets": 21, "cold_chain": False
     },
     "40' High Cube Konteyner (40ft HC)": {
-        "length": 12032, "width": 2352, "height": 2698, "max_payload_kg": 26500, "euro_pallets": 25, "std_pallets": 21
+        "length": 12032, "width": 2352, "height": 2698, "max_payload_kg": 26500, "euro_pallets": 25, "std_pallets": 21, "cold_chain": False
+    },
+    "Frigofirik Tır (13.60 m Termokinli / Soğutmalı)": {
+        "length": 13350, "width": 2460, "height": 2600, "max_payload_kg": 22500, "euro_pallets": 33, "std_pallets": 26, "cold_chain": True
+    },
+    "Frigofirik 10 Teker Kamyon (8.20 m Soğutmalı)": {
+        "length": 8000, "width": 2450, "height": 2500, "max_payload_kg": 14500, "euro_pallets": 19, "std_pallets": 15, "cold_chain": True
+    },
+    "Frigofirik Dağıtım Kamyonu (6.20 m Soğutmalı)": {
+        "length": 6000, "width": 2400, "height": 2300, "max_payload_kg": 7500, "euro_pallets": 14, "std_pallets": 11, "cold_chain": True
+    },
+    "20' Reefer Konteyner (20ft Soğutmalı Denizyolu)": {
+        "length": 5444, "width": 2268, "height": 2276, "max_payload_kg": 27400, "euro_pallets": 10, "std_pallets": 9, "cold_chain": True
+    },
+    "40' High Cube Reefer Konteyner (40ft HC Soğutmalı)": {
+        "length": 11561, "width": 2268, "height": 2500, "max_payload_kg": 29500, "euro_pallets": 23, "std_pallets": 20, "cold_chain": True
     }
 }
 
 STACK_OPTIONS = ["Kolon (Üst Üste - %100 Direnç)", "Kilitli / Çapraz (%45 Kayıp)"]
 PALLET_OPTIONS = ["Euro Palet (1200 x 800 mm)", "Standart Palet (1200 x 1000 mm)"]
-VEHICLE_OPTIONS = list(VEHICLE_DATABASE.keys())
 
-# --- SESSION STATE SENKRONİZASYONU ---
-if "stacking_pattern_state" not in st.session_state: st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
-if "pallet_choice_state" not in st.session_state: st.session_state["pallet_choice_state"] = PALLET_OPTIONS[0]
-if "max_pallet_h_state" not in st.session_state: st.session_state["max_pallet_h_state"] = 1750
-if "vehicle_choice_state" not in st.session_state: st.session_state["vehicle_choice_state"] = VEHICLE_OPTIONS[0]
+# --- SESSION STATE YÖNETİMİ ---
+if "active_step" not in st.session_state:
+    st.session_state["active_step"] = 1
+
+if "stacking_pattern_state" not in st.session_state:
+    st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
+if "pallet_choice_state" not in st.session_state:
+    st.session_state["pallet_choice_state"] = PALLET_OPTIONS[0]
+if "max_pallet_h_state" not in st.session_state:
+    st.session_state["max_pallet_h_state"] = 1750
 
 def sync_pattern_sb(): st.session_state["stacking_pattern_state"] = st.session_state["sb_pattern"]
 def sync_pattern_main(): st.session_state["stacking_pattern_state"] = st.session_state["main_pattern"]
@@ -112,6 +135,9 @@ def sync_height_sb(): st.session_state["max_pallet_h_state"] = st.session_state[
 def sync_height_main(): st.session_state["max_pallet_h_state"] = st.session_state["main_height"]
 def sync_vehicle_sb(): st.session_state["vehicle_choice_state"] = st.session_state["sb_vehicle"]
 def sync_vehicle_main(): st.session_state["vehicle_choice_state"] = st.session_state["main_vehicle"]
+
+def set_step(step_number):
+    st.session_state["active_step"] = step_number
 
 # --- HESAPLAMA VE ÇİZİMLER ---
 
@@ -169,7 +195,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
     patterns.sort(key=lambda x: (x["count"], x["efficiency"]), reverse=True)
     return patterns
 
-# --- PLOTLY EKRAN ÇİZİM FONKSİYONLARI ---
+# --- PLOTLY 2B/3B ÇİZİMLER ---
 
 def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
@@ -295,7 +321,7 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
     )
     return fig
 
-# --- PDF VEKTÖREL ÇİZİM JENERATÖRLERİ (2B & 3B) ---
+# --- PDF VEKTÖREL ÇİZİM JENERATÖRLERİ ---
 
 def pdf_draw_pallet_2d(pallet_l, pallet_w, coords, width=255, height=125):
     d = Drawing(width, height)
@@ -504,10 +530,8 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_log)
     elements.append(Spacer(1, 6))
 
-    # 4. Vektörel Görselleştirme Şemaları (2B & 3B Palet ve Taşıt)
+    # 4. Vektörel Görselleştirme Şemaları
     elements.append(Paragraph(tr_fix("4. 2B ve 3B Palet & Taşıt Yükleme Görsel Şemaları"), h2_style))
-    
-    # Palet Çizimleri
     d_pal_2d = pdf_draw_pallet_2d(pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['coords'], width=265, height=125)
     d_pal_3d = pdf_draw_pallet_3d_iso(pallet_info['dim'][0], pallet_info['dim'][1], b_out[2], pallet_info['layers'], pallet_info['coords'], width=265, height=125)
     
@@ -525,7 +549,6 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_pal_draw)
     elements.append(Spacer(1, 5))
 
-    # Taşıt Çizimleri
     v_data = vehicle_info['data']
     d_veh_2d = pdf_draw_vehicle_2d(v_data['length'], v_data['width'], pallet_info['dim'][0], pallet_info['dim'][1], True, vehicle_info['pallets'], width=265, height=115)
     d_veh_3d = pdf_draw_vehicle_3d_iso(v_data['length'], v_data['width'], v_data['height'], pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['full_h'], True, vehicle_info['pallets'], vehicle_info['double_stack'], width=265, height=115)
@@ -582,10 +605,23 @@ with st.sidebar:
     st.selectbox("İstif Deseni", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="sb_pattern", on_change=sync_pattern_sb)
     overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
 
+    is_cold_storage = selected_env["is_cold"]
+    available_vehicles = [k for k, v in VEHICLE_DATABASE.items() if v["cold_chain"] == is_cold_storage]
+
     st.header("4. Palet ve Taşıma Kriterleri")
     st.selectbox("Palet Standardı", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="sb_pallet", on_change=sync_pallet_sb)
     st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="sb_height", on_change=sync_height_sb)
-    st.selectbox("Taşıma Aracı", VEHICLE_OPTIONS, index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]), key="sb_vehicle", on_change=sync_vehicle_sb)
+
+    if st.session_state.get("vehicle_choice_state") not in available_vehicles:
+        st.session_state["vehicle_choice_state"] = available_vehicles[0]
+
+    st.selectbox(
+        "Taşıma Aracı" + (" (Frigofirik / Soğutmalı)" if is_cold_storage else " (Kuru Yük / Standart)"),
+        available_vehicles,
+        index=available_vehicles.index(st.session_state["vehicle_choice_state"]),
+        key="sb_vehicle",
+        on_change=sync_vehicle_sb
+    )
 
     st.divider()
     st.caption("© 2026 Okyanus Danışmanlık\nDr. Murat Özdemir (Gıda Müh.)")
@@ -687,7 +723,7 @@ else:
     total_loose_boxes = max_loose_vol_boxes
 
 extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
-recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20) else "Paletli Yükleme"
+recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20 and not is_cold_storage) else "Paletli Yükleme"
 
 # PDF Paketi
 pdf_product_dict = {
@@ -714,7 +750,7 @@ pdf_bytes = generate_pdf_report(pdf_product_dict, pdf_storage_dict, active_eval,
 safe_sku = re.sub(r'[^a-zA-Z0-9_-]', '_', box_code_input.strip()) if box_code_input else ""
 pdf_file_title = f"Koli_Raporu_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Koli_Mukavemet_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
-# --- ANA EKRAN GÖRÜNÜMÜ ---
+# --- ANA EKRAN BAŞLIK & İNDİRME ---
 
 col_head, col_btn = st.columns([3, 1])
 with col_head:
@@ -726,26 +762,79 @@ with col_btn:
     st.write("")
     st.download_button(label="📥 PDF Raporunu İndir", data=pdf_bytes, file_name=pdf_file_title, mime="application/pdf", use_container_width=True)
 
+# Hızlı Kontrol Paneli
 with st.container():
-    st.markdown("##### ⚙️ Palet & Taşıma Kriterleri Kontrol Paneli")
+    st.markdown("##### ⚙️ Hızlı Ayar Paneli")
     c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
     with c_ctrl1: st.selectbox("Palet Standardı:", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="main_pallet", on_change=sync_pallet_main)
     with c_ctrl2: st.number_input("Maks. Palet Yüksekliği (mm):", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="main_height", on_change=sync_height_main)
-    with c_ctrl3: st.selectbox("Taşıma Aracı / Konteyner:", VEHICLE_OPTIONS, index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]), key="main_vehicle", on_change=sync_vehicle_main)
+    with c_ctrl3: st.selectbox("Taşıma Aracı / Konteyner:", available_vehicles, index=available_vehicles.index(st.session_state["vehicle_choice_state"]), key="main_vehicle", on_change=sync_vehicle_main)
     with c_ctrl4: st.selectbox("İstif Deseni:", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="main_pattern", on_change=sync_pattern_main)
 
 st.divider()
 
-# TABLAR
-tab1, tab2, tab3 = st.tabs([
-    "🔬 1. Mukavemet Raporu & Mukavva Tavsiyesi",
-    "📦 2. Koli & Palet Dizilimi (2B / 3B)",
-    "🚛 3. Araç & Konteyner Yükleme (2B / 3B)"
-])
+# --- GÖRSEL VE İNTERAKTİF ADIM NAVİGASYONU (WIZARD) ---
 
-# === TAB 1: MUKAVEMET ===
-with tab1:
-    st.subheader(f"🎯 Hedef Koli Mukavemet Analizi ({env_choice})")
+cur_step = st.session_state["active_step"]
+
+st.markdown("### 🧭 Analiz ve Optimizasyon Adımları")
+nav_col1, nav_col2, nav_col3 = st.columns(3)
+
+with nav_col1:
+    btn_type1 = "primary" if cur_step == 1 else "secondary"
+    st.button(
+        "🔬 **1. ADIM:** Mukavemet & Mukavva Kalitesi",
+        key="nav_step_1",
+        type=btn_type1,
+        use_container_width=True,
+        on_click=set_step,
+        args=(1,)
+    )
+    if cur_step == 1:
+        st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Ezilme Dayanımı & Hedef BCT</div>", unsafe_allow_html=True)
+
+with nav_col2:
+    btn_type2 = "primary" if cur_step == 2 else "secondary"
+    st.button(
+        "📦 **2. ADIM:** Koli & Palet Dizilimi (2B/3B)",
+        key="nav_step_2",
+        type=btn_type2,
+        use_container_width=True,
+        on_click=set_step,
+        args=(2,)
+    )
+    if cur_step == 2:
+        st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Palet Krokisi & 3B İstif</div>", unsafe_allow_html=True)
+
+with nav_col3:
+    btn_type3 = "primary" if cur_step == 3 else "secondary"
+    st.button(
+        "🚛 **3. ADIM:** Araç & Konteyner (2B/3B)",
+        key="nav_step_3",
+        type=btn_type3,
+        use_container_width=True,
+        on_click=set_step,
+        args=(3,)
+    )
+    if cur_step == 3:
+        st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Paletli vs. Dökme Yükleme</div>", unsafe_allow_html=True)
+
+# İlerleme Çubuğu
+progress_val = {1: 0.33, 2: 0.66, 3: 1.0}[cur_step]
+st.progress(progress_val)
+st.write("")
+
+# ==============================================================================
+# === EKRAN 1: MUKAVEMET VE MUKAVVA SEÇİMİ ===
+# ==============================================================================
+if cur_step == 1:
+    st.subheader(f"🎯 1. Adım: Hedef Koli Mukavemet Analizi ({env_choice})")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Hedef Gereken BCT", f"{active_eval['target_required_bct_kgf']:.1f} kgf", "Dinamik İstif Dayanımı")
     m2.metric("Gereken Min. ECT", f"{active_eval['req_min_ect']:.2f} kN/m", "Kenar Ezilme Direnci")
@@ -800,9 +889,16 @@ with tab1:
         * **Formül:** $S_f = T_{{env}} \\times H_f \\times T_f \\times P_f \\times O_f = {sf:.2f}$
         """)
 
-# === TAB 2: PALET (2B / 3B) ===
-with tab2:
-    st.subheader(f"📦 Koli & Palet Yerleşim Simülasyonu ({active_pallet})")
+    st.write("")
+    _, col_next = st.columns([4, 1.2])
+    with col_next:
+        st.button("📦 2. Adıma Geç (Palet Dizilimi) ➡️", type="primary", use_container_width=True, on_click=set_step, args=(2,))
+
+# ==============================================================================
+# === EKRAN 2: PALET VE KOLİ DİZİLİMİ ===
+# ==============================================================================
+elif cur_step == 2:
+    st.subheader(f"📦 2. Adım: Koli & Palet Yerleşim Simülasyonu ({active_pallet})")
     c_p1, c_p2, c_p3, c_p4 = st.columns(4)
     c_p1.metric("Koli Dış Ölçüleri", f"{int(box_out_l)}x{int(box_out_w)}x{int(box_out_h)} mm")
     c_p2.metric("Koli Brüt Ağırlık", f"{gross_box_kg:.2f} kg")
@@ -835,17 +931,32 @@ with tab2:
             fig_3d_p = draw_3d_pallet_stack(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, box_out_h, layers_per_pallet, active_pattern)
             st.plotly_chart(fig_3d_p, use_container_width=True)
 
-# === TAB 3: ARAÇ VE KONTEYNER (2B / 3B) ===
-with tab3:
-    st.subheader(f"🚚 Taşıma ve Konteyner Yükleme: {active_vehicle}")
+    st.write("")
+    col_prev, _, col_next = st.columns([1.2, 2.6, 1.2])
+    with col_prev:
+        st.button("⬅️ 1. Adıma Dön", use_container_width=True, on_click=set_step, args=(1,))
+    with col_next:
+        st.button("🚛 3. Adıma Geç (Araç/Yükleme) ➡️", type="primary", use_container_width=True, on_click=set_step, args=(3,))
+
+# ==============================================================================
+# === EKRAN 3: ARAÇ VE KONTEYNER YÜKLEME ===
+# ==============================================================================
+elif cur_step == 3:
+    st.subheader(f"🚚 3. Adım: Taşıma ve Konteyner Yükleme ({active_vehicle})")
+    
+    if is_cold_storage:
+        st.info("❄️ **Soğuk Zincir Rejimi Aktif:** Ürünlerinizin bozulmaması için yalnızca termokinli / frigofirik ve reefer araçlar listelenmektedir.")
+
     c1, c2, c3 = st.columns(3)
     c1.metric("Paletli Toplam Koli", f"{pallet_total_boxes:,} Adet", f"{total_pallets_in_v} Palet ({'Çift Kat' if double_stack else 'Tek Kat'})")
     c2.metric("Dökme Toplam Koli", f"{total_loose_boxes:,} Adet", f"+%{extra_capacity_percent:.1f} Artış")
     with c3:
-        if recommended_shipping == "Dökme Yükleme":
+        if is_cold_storage:
+            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nSoğuk zincirde hava sirkülasyonu sağlamak ve ısı kaybını önlemek için kesinlikle paletli taşıma önerilir.")
+        elif recommended_shipping == "Dökme Yükleme":
             st.success("💡 **ÖNERİLEN: DÖKME YÜKLEME**\nDenizyolu konteyner navlunu optimizasyonu için dökme yükleme önerilir.")
         else:
-            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nHızlı boşaltma ve soğuk zincir deformasyonunu önlemek için paletli taşıma önerilir.")
+            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nHızlı boşaltma ve deformasyonu önlemek için paletli taşıma önerilir.")
 
     st.table(pd.DataFrame([
         {
@@ -854,7 +965,7 @@ with tab3:
             "Toplam Ürün": f"{pallet_total_boxes * total_units_box:,} Adet",
             "Toplam Yük Ağırlığı": f"{calc_pallet_weight:,.1f} kg",
             "Araç Tonaj Doluluğu": f"%{(calc_pallet_weight / v_info['max_payload_kg'])*100:.1f}",
-            "Operasyonel Not": "Hızlı Boşaltma, Sıfır Hasar"
+            "Operasyonel Not": "Hızlı Boşaltma, Sıfır Hasar, Soğuk Hava Sirkülasyonu"
         },
         {
             "Yükleme Yöntemi": "Dökme (Loose Box) Taşıma",
@@ -879,6 +990,11 @@ with tab3:
     else:
         fig_3d_v = draw_3d_vehicle_layout(v_info["length"], v_info["width"], v_info["height"], is_pal_mode, pallet_dim[0], pallet_dim[1], pallet_full_h, double_stack, box_out_l, box_out_w, box_out_h, total_pallets_in_v)
         st.plotly_chart(fig_3d_v, use_container_width=True)
+
+    st.write("")
+    col_prev, _, _ = st.columns([1.2, 2.6, 1.2])
+    with col_prev:
+        st.button("⬅️ 2. Adıma Dön (Palet)", use_container_width=True, on_click=set_step, args=(2,))
 
 # Alt Bilgi (Footer)
 st.divider()
