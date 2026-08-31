@@ -83,22 +83,42 @@ VEHICLE_DATABASE = {
     }
 }
 
-# --- İSTİF DESENİ SENKRONİZASYON DURUMU (SESSION STATE) ---
 STACK_OPTIONS = [
     "Kolon (Üst Üste - %100 Direnç)",
     "Kilitli / Çapraz (%45 Kayıp)"
 ]
 
+PALLET_OPTIONS = [
+    "Euro Palet (1200 x 800 mm)",
+    "Standart Palet (1200 x 1000 mm)"
+]
+
+VEHICLE_OPTIONS = list(VEHICLE_DATABASE.keys())
+
+# --- SESSION STATE SENKRONİZASYONU ---
 if "stacking_pattern_state" not in st.session_state:
     st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
+if "pallet_choice_state" not in st.session_state:
+    st.session_state["pallet_choice_state"] = PALLET_OPTIONS[0]
+if "max_pallet_h_state" not in st.session_state:
+    st.session_state["max_pallet_h_state"] = 1750
+if "vehicle_choice_state" not in st.session_state:
+    st.session_state["vehicle_choice_state"] = VEHICLE_OPTIONS[0]
 
-def update_pattern_from_sidebar():
-    st.session_state["stacking_pattern_state"] = st.session_state["sidebar_pattern_input"]
+# Callback Fonksiyonları
+def sync_pattern_sb(): st.session_state["stacking_pattern_state"] = st.session_state["sb_pattern"]
+def sync_pattern_main(): st.session_state["stacking_pattern_state"] = st.session_state["main_pattern"]
 
-def update_pattern_from_main():
-    st.session_state["stacking_pattern_state"] = st.session_state["main_pattern_input"]
+def sync_pallet_sb(): st.session_state["pallet_choice_state"] = st.session_state["sb_pallet"]
+def sync_pallet_main(): st.session_state["pallet_choice_state"] = st.session_state["main_pallet"]
 
-# --- HESAPLAMA VE GÖRSELLEŞTİRME FONKSİYONLARI ---
+def sync_height_sb(): st.session_state["max_pallet_h_state"] = st.session_state["sb_height"]
+def sync_height_main(): st.session_state["max_pallet_h_state"] = st.session_state["main_height"]
+
+def sync_vehicle_sb(): st.session_state["vehicle_choice_state"] = st.session_state["sb_vehicle"]
+def sync_vehicle_main(): st.session_state["vehicle_choice_state"] = st.session_state["main_vehicle"]
+
+# --- HESAPLAMA FONKSİYONLARI ---
 
 def calculate_environmental_safety_factor(temp_factor, humidity_rh, storage_days, stacking_pattern, overhang):
     h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.30 if humidity_rh <= 75 else (1.55 if humidity_rh <= 85 else 1.95)))
@@ -190,12 +210,8 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
     )
     return fig
 
-# --- STREAMLIT ARAYÜZÜ ---
+# --- STREAMLIT SIDEBAR ---
 
-st.title("🔬 Gıda Koli Mukavemet & Lojistik Mühendisliği")
-st.caption("Bu araç, gıda ürününüz ve **zorunlu depolama koşullarınıza** göre önce **Hedef Koli Mukavemetini (Gereken BCT & ECT)** hesaplar; ardından bu mukavemeti sağlayacak **en uygun mukavva yapısını** ve lojistik yerleşimini belirler.")
-
-# SIDEBAR GİRDİLERİ
 with st.sidebar:
     st.header("1. Birincil Ürün Bilgileri")
     p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=120.0, step=5.0)
@@ -215,26 +231,45 @@ with st.sidebar:
     humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, selected_env["default_rh"], step=5)
     storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
     
-    # Sidebar İstif Deseni
-    current_idx_sb = STACK_OPTIONS.index(st.session_state["stacking_pattern_state"])
     st.selectbox(
         "İstif Deseni",
         STACK_OPTIONS,
-        index=current_idx_sb,
-        key="sidebar_pattern_input",
-        on_change=update_pattern_from_sidebar
+        index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]),
+        key="sb_pattern",
+        on_change=sync_pattern_sb
     )
     overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
 
     st.header("4. Palet ve Taşıma Kriterleri")
-    pallet_choice = st.selectbox("Palet Standardı", ["Euro Palet (1200 x 800 mm)", "Standart Palet (1200 x 1000 mm)"])
-    pallet_dim = (1200, 800) if "Euro" in pallet_choice else (1200, 1000)
-    max_pallet_h = st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=1750, step=50)
-    vehicle_choice = st.selectbox("Taşıma Aracı", list(VEHICLE_DATABASE.keys()))
+    st.selectbox(
+        "Palet Standardı",
+        PALLET_OPTIONS,
+        index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]),
+        key="sb_pallet",
+        on_change=sync_pallet_sb
+    )
+    st.number_input(
+        "Maks. Palet Yüksekliği (mm)",
+        min_value=500, value=st.session_state["max_pallet_h_state"], step=50,
+        key="sb_height",
+        on_change=sync_height_sb
+    )
+    st.selectbox(
+        "Taşıma Aracı",
+        VEHICLE_OPTIONS,
+        index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]),
+        key="sb_vehicle",
+        on_change=sync_vehicle_sb
+    )
 
-# --- TEMEL MUKAVEMET VE HEDEF HESAPLAMALARI ---
+# --- AKTİF SEÇİMLER VE HESAPLAMA ---
 
-active_stacking_pattern = st.session_state["stacking_pattern_state"]
+active_stacking = st.session_state["stacking_pattern_state"]
+active_pallet = st.session_state["pallet_choice_state"]
+active_max_h = st.session_state["max_pallet_h_state"]
+active_vehicle = st.session_state["vehicle_choice_state"]
+
+pallet_dim = (1200, 800) if "Euro" in active_pallet else (1200, 1000)
 
 box_in_l = (p_length * nx) + 4
 box_in_w = (p_width * ny) + 4
@@ -242,7 +277,7 @@ box_in_h = (p_height * nz) + 4
 net_contents_kg = (total_units_box * p_weight) / 1000
 
 sf, temp_f, hf, tf, pf, of = calculate_environmental_safety_factor(
-    selected_env["base_temp_factor"], humidity_rh, storage_days, active_stacking_pattern, overhang
+    selected_env["base_temp_factor"], humidity_rh, storage_days, active_stacking, overhang
 )
 
 board_evaluations = []
@@ -258,7 +293,7 @@ for key, bdata in BOARD_DATABASE.items():
     b_out_h = box_in_h + (3 * caliper)
     perimeter = 2 * (b_out_l + b_out_w)
     
-    usable_h = max_pallet_h - 145
+    usable_h = active_max_h - 145
     layers = int(usable_h // b_out_h)
     if layers < 1:
         layers = 1
@@ -290,8 +325,7 @@ for key, bdata in BOARD_DATABASE.items():
         "is_safe": is_safe,
         "layers": layers,
         "box_out_dims": (b_out_l, b_out_w, b_out_h),
-        "gross_koli_kg": gross_koli_kg,
-        "cost_index": bdata["cost_index"]
+        "gross_koli_kg": gross_koli_kg
     }
     board_evaluations.append(eval_item)
     
@@ -311,6 +345,50 @@ selected_pattern = patterns[0]
 total_boxes_pallet = selected_pattern["count"] * layers_per_pallet
 total_pallet_gross = (total_boxes_pallet * gross_box_kg) + 25
 
+# --- ANA EKRAN GÖRÜNÜMÜ ---
+
+st.title("🔬 Gıda Koli Mukavemet & Lojistik Mühendisliği")
+st.caption("Gıda ürününüz ve depolama şartlarınıza göre hedef BCT/ECT mukavemetini hesaplayın, en uygun mukavvayı ve lojistik parametrelerini belirleyin.")
+
+# HIZLI PALET & TAŞIMA KONTROL ŞERİDİ (ANA EKRAN)
+with st.container():
+    st.markdown("##### ⚙️ Palet & Taşıma Kriterleri Kontrol Paneli")
+    c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
+    
+    with c_ctrl1:
+        st.selectbox(
+            "Palet Standardı:",
+            PALLET_OPTIONS,
+            index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]),
+            key="main_pallet",
+            on_change=sync_pallet_main
+        )
+    with c_ctrl2:
+        st.number_input(
+            "Maks. Palet Yüksekliği (mm):",
+            min_value=500, value=st.session_state["max_pallet_h_state"], step=50,
+            key="main_height",
+            on_change=sync_height_main
+        )
+    with c_ctrl3:
+        st.selectbox(
+            "Taşıma Aracı / Konteyner:",
+            VEHICLE_OPTIONS,
+            index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]),
+            key="main_vehicle",
+            on_change=sync_vehicle_main
+        )
+    with c_ctrl4:
+        st.selectbox(
+            "İstif Deseni:",
+            STACK_OPTIONS,
+            index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]),
+            key="main_pattern",
+            on_change=sync_pattern_main
+        )
+
+st.divider()
+
 # --- TAB YAPILANDIRMASI ---
 tab1, tab2, tab3 = st.tabs([
     "🔬 1. Mukavemet Raporu & Mukavva Kalitesi Tavsiyesi",
@@ -328,29 +406,13 @@ with tab1:
     m3.metric("Toplam Emniyet Faktörü (Sf)", f"{sf:.2f}", f"Rejim: {selected_env['temp_desc']}")
     m4.metric("Koli İstif Yüksekliği", f"{layers_per_pallet} Kat", f"1 Koli Yükü: {active_eval['gross_koli_kg']*(layers_per_pallet-1):.1f} kgf")
 
-    st.divider()
-
-    # Öneri Kartı
+    st.write("")
     if active_eval["is_safe"]:
         st.success(f"🏆 **ÖNERİLEN MUKAVVA YAPISI: {recommended_board_key}**\n\nBu mukavva yapısı, belirtilen **{selected_env['temp_desc']}** ve **%{humidity_rh} RH** ortam şartlarında gereken `{active_eval['target_required_bct_kgf']:.1f} kgf` hedef mukavemeti **{active_eval['safety_margin']:.2f}x güvenlik payı** ile karşılayan en ekonomik kalitedir.")
     else:
         st.error(f"⚠️ **DİKKAT: Standart mukavvalar yetersiz kalıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile hedefin altında kalmaktadır. Kat sayısını düşürün veya koli içi seperatör/destek kullanın.")
 
-    # Matris Başlığı ve Doğrudan İstif Deseni Seçim Alanı
     st.subheader("📋 Mukavva Kalitelerinin Hedef Mukavemete Uygunluk Matrisi")
-    
-    col_mat_title, col_mat_sel = st.columns([1.5, 1])
-    with col_mat_title:
-        st.caption("Aşağıdaki tablodan depolama şartlarınıza göre mukavemet durumunu inceleyebilir, sağ taraftan istif şeklini değiştirerek anlık mukavemet farkını gözlemleyebilirsiniz:")
-    with col_mat_sel:
-        current_idx_main = STACK_OPTIONS.index(st.session_state["stacking_pattern_state"])
-        st.selectbox(
-            "🔄 İstif Deseni Değiştir:",
-            STACK_OPTIONS,
-            index=current_idx_main,
-            key="main_pattern_input",
-            on_change=update_pattern_from_main
-        )
     
     table_rows = []
     for item in board_evaluations:
@@ -411,7 +473,7 @@ with tab1:
 
 # === TAB 2: KOLİ VE PALET DİZİLİMİ ===
 with tab2:
-    st.subheader("📦 Belirlenen Koli Ölçüleri ve Palet Yerleşim Simülasyonu")
+    st.subheader(f"📦 Koli & Palet Yerleşim Simülasyonu ({active_pallet})")
     
     c_p1, c_p2, c_p3, c_p4 = st.columns(4)
     c_p1.metric("Koli Dış Ölçüleri", f"{int(box_out_l)}x{int(box_out_w)}x{int(box_out_h)} mm")
@@ -443,10 +505,10 @@ with tab2:
 
 # === TAB 3: ARAÇ VE KONTEYNER YÜKLEME ===
 with tab3:
-    st.subheader(f"🚚 Taşıma ve Konteyner Yükleme: {vehicle_choice}")
-    v_info = VEHICLE_DATABASE[vehicle_choice]
+    st.subheader(f"🚚 Taşıma ve Konteyner Yükleme: {active_vehicle}")
+    v_info = VEHICLE_DATABASE[active_vehicle]
     
-    is_euro = "Euro" in pallet_choice
+    is_euro = "Euro" in active_pallet
     floor_pallets = v_info["euro_pallets"] if is_euro else v_info["std_pallets"]
     
     pallet_full_h = 145 + (layers_per_pallet * box_out_h)
@@ -482,7 +544,7 @@ with tab3:
     
     extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
     with c3:
-        if "Konteyner" in vehicle_choice and extra_capacity_percent > 20:
+        if "Konteyner" in active_vehicle and extra_capacity_percent > 20:
             st.success("💡 **ÖNERİLEN: DÖKME YÜKLEME**\nDenizyolu konteyner navlunu optimizasyonu için dökme yükleme önerilir.")
         else:
             st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nHızlı boşaltma ve soğuk zincir deformasyonunu önlemek için paletli taşıma önerilir.")
