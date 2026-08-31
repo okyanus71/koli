@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Hacimsel & Miktarsal Doluluklu)
 """
 
 import streamlit as st
@@ -116,14 +116,13 @@ VEHICLE_DATABASE = {
 STACK_OPTIONS = ["Kolon (Üst Üste - %100 Direnç)", "Kilitli / Çapraz (%45 Kayıp)"]
 PALLET_OPTIONS = ["Euro Palet (1200 x 800 mm)", "Standart Palet (1200 x 1000 mm)"]
 
-# --- SESSION STATE YÖNETİMİ ---
 if "active_step" not in st.session_state:
     st.session_state["active_step"] = 1
 
 def set_step(step_number):
     st.session_state["active_step"] = step_number
 
-# --- HESAPLAMA VE ÇİZİMLER ---
+# --- HESAPLAMA FONKSİYONLARI ---
 
 def calculate_environmental_safety_factor(temp_factor, humidity_rh, storage_days, stacking_pattern, overhang):
     h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.30 if humidity_rh <= 75 else (1.55 if humidity_rh <= 85 else 1.95)))
@@ -183,7 +182,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
 
 def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
-    y = [y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy, y0]
+    y = [y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy]
     z = [z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz]
     i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
     j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
@@ -501,23 +500,53 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_mat)
     elements.append(Spacer(1, 6))
 
-    # 3. Palet ve Araç Özeti
-    elements.append(Paragraph(tr_fix("3. Paletleme ve Lojistik Yükleme Özeti"), h2_style))
+    # 3. Palet ve Araç Doluluk Özeti (Hacimsel & Miktarsal)
+    elements.append(Paragraph(tr_fix("3. Palet ve Taşıt Doluluk / Kapasite Analizi (Hacimsel & Miktarsal)"), h2_style))
     log_data = [
-        [Paragraph(tr_fix("<b>Seçili Palet Tipi:</b>"), normal_style), tr_fix(pallet_info['type']), Paragraph(tr_fix("<b>Taşıma Aracı:</b>"), normal_style), tr_fix(vehicle_info['name'])],
-        [Paragraph(tr_fix("<b>Kat Başına Koli / Kat:</b>"), normal_style), tr_fix(f"{pallet_info['per_layer']} Koli / {pallet_info['layers']} Kat"), Paragraph(tr_fix("<b>Paletli Toplam Koli:</b>"), normal_style), tr_fix(f"{vehicle_info['pallet_boxes']:,} Koli ({vehicle_info['pallets']} Palet)")],
-        [Paragraph(tr_fix("<b>1 Paletteki Toplam Koli:</b>"), normal_style), tr_fix(f"{pallet_info['total_boxes']} Koli ({pallet_info['total_units']} Ürün)"), Paragraph(tr_fix("<b>Dökme Toplam Koli:</b>"), normal_style), tr_fix(f"{vehicle_info['loose_boxes']:,} Koli (+%{vehicle_info['loose_gain']:.1f})")],
-        [Paragraph(tr_fix("<b>1 Palet Brüt Ağırlığı:</b>"), normal_style), f"{pallet_info['pallet_gross']:.1f} kg", Paragraph(tr_fix("<b>Önerilen Yöntem:</b>"), normal_style), Paragraph(tr_fix(f"<b>{vehicle_info['rec']}</b>"), bold_style)]
+        [
+            Paragraph(tr_fix("<b>Seçili Palet Standardı:</b>"), normal_style), tr_fix(pallet_info['type']),
+            Paragraph(tr_fix("<b>Taşıma Aracı / Konteyner:</b>"), normal_style), tr_fix(vehicle_info['name'])
+        ],
+        [
+            Paragraph(tr_fix("<b>Palet Kat / Kat Başı Koli:</b>"), normal_style), tr_fix(f"{pallet_info['layers']} Kat / {pallet_info['per_layer']} Koli"),
+            Paragraph(tr_fix("<b>Paletli Koli & Palet Sayısı:</b>"), normal_style), tr_fix(f"{vehicle_info['pallet_boxes']:,} Koli ({vehicle_info['pallets']} Palet)")
+        ],
+        [
+            Paragraph(tr_fix("<b>1 Paletteki Toplam Koli:</b>"), normal_style), tr_fix(f"{pallet_info['total_boxes']} Koli ({pallet_info['total_units']:,} Ürün)"),
+            Paragraph(tr_fix("<b>Dökme Yükleme Koli Sayısı:</b>"), normal_style), tr_fix(f"{vehicle_info['loose_boxes']:,} Koli (+%{vehicle_info['loose_gain']:.1f})")
+        ],
+        [
+            Paragraph(tr_fix("<b>Palet Taban Doluluğu:</b>"), normal_style), f"%{pallet_info['area_eff']:.1f}",
+            Paragraph(tr_fix("<b>Paletli Miktarsal Doluluk (Ağırlık):</b>"), normal_style), f"%{vehicle_info['pallet_weight_util']:.1f} ({vehicle_info['pallet_total_wt']:,.1f} kg)"
+        ],
+        [
+            Paragraph(tr_fix("<b>1 Palet Toplam Ağırlığı:</b>"), normal_style), f"{pallet_info['pallet_gross']:.1f} kg",
+            Paragraph(tr_fix("<b>Paletli Hacimsel Doluluk (Kübaj):</b>"), normal_style), f"%{vehicle_info['pallet_vol_util']:.1f} ({vehicle_info['pallet_total_vol']:.1f} m³)"
+        ],
+        [
+            Paragraph(tr_fix("<b>Koli İçi Hacim Doluluğu:</b>"), normal_style), f"%{prod_info['box_fill_rate']:.1f}",
+            Paragraph(tr_fix("<b>Dökme Hacimsel Doluluk:</b>"), normal_style), f"%{vehicle_info['loose_vol_util']:.1f} ({vehicle_info['loose_total_vol']:.1f} m³)"
+        ],
+        [
+            Paragraph(tr_fix("<b>Önerilen Sevkiyat Modu:</b>"), normal_style), Paragraph(tr_fix(f"<b>{vehicle_info['rec']}</b>"), bold_style),
+            Paragraph(tr_fix("<b>Dökme Miktarsal Doluluk:</b>"), normal_style), f"%{vehicle_info['loose_weight_util']:.1f} ({vehicle_info['loose_total_wt']:,.1f} kg)"
+        ]
     ]
-    t_log = Table(log_data, colWidths=[130, 140, 125, 145])
-    t_log.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 2.5), ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)]))
+    t_log = Table(log_data, colWidths=[130, 140, 130, 140])
+    t_log.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2.2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
+    ]))
     elements.append(t_log)
     elements.append(Spacer(1, 6))
 
     # 4. Vektörel Görselleştirme Şemaları
     elements.append(Paragraph(tr_fix("4. 2B ve 3B Palet & Taşıt Yükleme Görsel Şemaları"), h2_style))
-    d_pal_2d = pdf_draw_pallet_2d(pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['coords'], width=265, height=125)
-    d_pal_3d = pdf_draw_pallet_3d_iso(pallet_info['dim'][0], pallet_info['dim'][1], b_out[2], pallet_info['layers'], pallet_info['coords'], width=265, height=125)
+    d_pal_2d = pdf_draw_pallet_2d(pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['coords'], width=265, height=120)
+    d_pal_3d = pdf_draw_pallet_3d_iso(pallet_info['dim'][0], pallet_info['dim'][1], b_out[2], pallet_info['layers'], pallet_info['coords'], width=265, height=120)
     
     t_pal_draw = Table([
         [Paragraph(tr_fix("<b>Palet Kat Planı (2B)</b>"), normal_style), Paragraph(tr_fix("<b>Palet İstif Simülasyonu (3B İzometrik)</b>"), normal_style)],
@@ -531,11 +560,11 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
     ]))
     elements.append(t_pal_draw)
-    elements.append(Spacer(1, 5))
+    elements.append(Spacer(1, 4))
 
     v_data = vehicle_info['data']
-    d_veh_2d = pdf_draw_vehicle_2d(v_data['length'], v_data['width'], pallet_info['dim'][0], pallet_info['dim'][1], True, vehicle_info['pallets'], width=265, height=115)
-    d_veh_3d = pdf_draw_vehicle_3d_iso(v_data['length'], v_data['width'], v_data['height'], pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['full_h'], True, vehicle_info['pallets'], vehicle_info['double_stack'], width=265, height=115)
+    d_veh_2d = pdf_draw_vehicle_2d(v_data['length'], v_data['width'], pallet_info['dim'][0], pallet_info['dim'][1], True, vehicle_info['pallets'], width=265, height=110)
+    d_veh_3d = pdf_draw_vehicle_3d_iso(v_data['length'], v_data['width'], v_data['height'], pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['full_h'], True, vehicle_info['pallets'], vehicle_info['double_stack'], width=265, height=110)
     
     t_veh_draw = Table([
         [Paragraph(tr_fix("<b>Araç Kasa Krokisi (2B)</b>"), normal_style), Paragraph(tr_fix("<b>Araç Yükleme Hacmi (3B İzometrik)</b>"), normal_style)],
@@ -549,7 +578,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
     ]))
     elements.append(t_veh_draw)
-    elements.append(Spacer(1, 6))
+    elements.append(Spacer(1, 5))
 
     footer_text = tr_fix("Raporlama & Mühendislik: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.) | McKee Mukavemet & ASTM D4169 Standartları")
     elements.append(Paragraph(footer_text, ParagraphStyle('FooterStyle', parent=normal_style, fontSize=7, textColor=colors.gray, alignment=1)))
@@ -614,6 +643,11 @@ box_in_w = (p_width * ny) + 4
 box_in_h = (p_height * nz) + 4
 net_contents_kg = (total_units_box * p_weight) / 1000
 
+# Koli İçi Doluluk Oranı
+box_inner_vol_m3 = (box_in_l * box_in_w * box_in_h) / 1_000_000_000
+product_total_vol_m3 = (p_length * p_width * p_height * total_units_box) / 1_000_000_000
+box_fill_rate = (product_total_vol_m3 / box_inner_vol_m3) * 100 if box_inner_vol_m3 > 0 else 100.0
+
 sf, temp_f, hf, tf, pf, of = calculate_environmental_safety_factor(
     selected_env["base_temp_factor"], humidity_rh, storage_days, active_stacking, overhang
 )
@@ -675,49 +709,71 @@ total_pallet_gross = (total_boxes_pallet * gross_box_kg) + 25
 pallet_coords = get_boxes_2d_coords(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, selected_pattern)
 pallet_full_h = 145 + (layers_per_pallet * box_out_h)
 
+# --- ARAÇ & DOLULUK HESAPLAMALARI (HACİM & MİKTAR) ---
 v_info = VEHICLE_DATABASE[active_vehicle]
+vehicle_volume_m3 = (v_info["length"] * v_info["width"] * v_info["height"]) / 1_000_000_000
+single_box_vol_m3 = (box_out_l * box_out_w * box_out_h) / 1_000_000_000
+single_pallet_vol_m3 = (pallet_dim[0] * pallet_dim[1] * pallet_full_h) / 1_000_000_000
+
 is_euro = "Euro" in active_pallet
 floor_pallets = v_info["euro_pallets"] if is_euro else v_info["std_pallets"]
 double_stack = (pallet_full_h * 2) <= v_info["height"]
 total_pallets_in_v = floor_pallets * (2 if double_stack else 1)
+
 calc_pallet_weight = total_pallets_in_v * total_pallet_gross
 if calc_pallet_weight > v_info["max_payload_kg"]:
     total_pallets_in_v = int(v_info["max_payload_kg"] // total_pallet_gross)
     calc_pallet_weight = total_pallets_in_v * total_pallet_gross
-pallet_total_boxes = total_pallets_in_v * total_boxes_pallet
 
+pallet_total_boxes = total_pallets_in_v * total_boxes_pallet
+pallet_total_vol_m3 = total_pallets_in_v * single_pallet_vol_m3
+pallet_weight_util = (calc_pallet_weight / v_info["max_payload_kg"]) * 100
+pallet_vol_util = (pallet_total_vol_m3 / vehicle_volume_m3) * 100
+
+# Dökme Hesap
 loose_nx1 = int(v_info["length"] // box_out_l) * int(v_info["width"] // box_out_w) * int(v_info["height"] // box_out_h)
 loose_nx2 = int(v_info["length"] // box_out_w) * int(v_info["width"] // box_out_l) * int(v_info["height"] // box_out_h)
 max_loose_vol_boxes = max(loose_nx1, loose_nx2)
 calc_loose_weight = max_loose_vol_boxes * gross_box_kg
+
 if calc_loose_weight > v_info["max_payload_kg"]:
     total_loose_boxes = int(v_info["max_payload_kg"] // gross_box_kg)
     calc_loose_weight = total_loose_boxes * gross_box_kg
 else:
     total_loose_boxes = max_loose_vol_boxes
 
+loose_total_vol_m3 = total_loose_boxes * single_box_vol_m3
+loose_weight_util = (calc_loose_weight / v_info["max_payload_kg"]) * 100
+loose_vol_util = (loose_total_vol_m3 / vehicle_volume_m3) * 100
+
 extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
 recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20 and not is_cold_storage) else "Paletli Yükleme"
 
-# PDF Paketi
+# PDF Paketi Hazırlığı
 pdf_product_dict = {
     'l': int(p_length), 'w': int(p_width), 'h': int(p_height),
     'weight': int(p_weight), 'units': total_units_box,
     'nx': int(nx), 'ny': int(ny), 'nz': int(nz),
-    'net_kg': net_contents_kg, 'box_name': box_name_input, 'box_code': box_code_input
+    'net_kg': net_contents_kg, 'box_name': box_name_input, 'box_code': box_code_input,
+    'box_fill_rate': box_fill_rate
 }
 pdf_storage_dict = {'env_name': env_choice, 'rh': humidity_rh, 'days': storage_days, 'pattern': active_stacking}
 pdf_pallet_dict = {
     'type': active_pallet, 'dim': pallet_dim, 'coords': pallet_coords,
     'per_layer': selected_pattern['count'], 'layers': layers_per_pallet,
     'total_boxes': total_boxes_pallet, 'total_units': total_boxes_pallet * total_units_box,
-    'pallet_gross': total_pallet_gross, 'full_h': pallet_full_h
+    'pallet_gross': total_pallet_gross, 'full_h': pallet_full_h,
+    'area_eff': selected_pattern['efficiency']
 }
 pdf_vehicle_dict = {
     'name': active_vehicle, 'data': v_info, 'pallets': total_pallets_in_v,
     'pallet_boxes': pallet_total_boxes, 'loose_boxes': total_loose_boxes,
     'loose_gain': extra_capacity_percent, 'rec': recommended_shipping,
-    'double_stack': double_stack
+    'double_stack': double_stack,
+    'pallet_total_wt': calc_pallet_weight, 'pallet_weight_util': pallet_weight_util,
+    'pallet_total_vol': pallet_total_vol_m3, 'pallet_vol_util': pallet_vol_util,
+    'loose_total_wt': calc_loose_weight, 'loose_weight_util': loose_weight_util,
+    'loose_total_vol': loose_total_vol_m3, 'loose_vol_util': loose_vol_util
 }
 
 pdf_bytes = generate_pdf_report(pdf_product_dict, pdf_storage_dict, active_eval, board_evaluations, pdf_pallet_dict, pdf_vehicle_dict)
@@ -790,7 +846,6 @@ with nav_col3:
     else:
         st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Paletli vs. Dökme Yükleme</div>", unsafe_allow_html=True)
 
-# İlerleme Çubuğu
 progress_val = {1: 0.33, 2: 0.66, 3: 1.0}[cur_step]
 st.progress(progress_val)
 st.write("")
@@ -868,7 +923,7 @@ elif cur_step == 2:
     c_p1.metric("Koli Dış Ölçüleri", f"{int(box_out_l)}x{int(box_out_w)}x{int(box_out_h)} mm")
     c_p2.metric("Koli Brüt Ağırlık", f"{gross_box_kg:.2f} kg")
     c_p3.metric("1 Paletteki Koli", f"{total_boxes_pallet} Adet", f"{layers_per_pallet} Kat")
-    c_p4.metric("Koli İçi Boşluk Oranı", f"%{100 - ((p_length*p_width*p_height*total_units_box)/(box_in_l*box_in_w*box_in_h)*100):.1f}")
+    c_p4.metric("Koli İçi Hacim Doluluğu", f"%{box_fill_rate:.1f}", f"Boşluk: %{100-box_fill_rate:.1f}")
 
     col_pat_left, col_pat_right = st.columns([1, 1.2])
     with col_pat_left:
@@ -882,9 +937,10 @@ elif cur_step == 2:
 
         st.info(f"""
         * **Kat Başına Koli:** `{active_pattern['count']} Adet` ({active_pattern['desc']})
-        * **Palet Üzeri Toplam Koli:** `{active_total_boxes} Adet` ({active_total_boxes * total_units_box} Ürün)
+        * **Palet Üzeri Toplam Koli:** `{active_total_boxes} Adet` ({active_total_boxes * total_units_box:,} Ürün)
         * **Palet Brüt Ağırlığı:** `{active_pallet_gross:.1f} kg`
-        * **Taban Doluluk Oranı:** `%{active_pattern['efficiency']:.1f}`
+        * **Palet Taban Alanı Doluluğu:** `%{active_pattern['efficiency']:.1f}`
+        * **1 Palet Toplam Hacmi:** `{single_pallet_vol_m3:.2f} m³`
         """)
 
     with col_pat_right:
@@ -912,32 +968,33 @@ elif cur_step == 3:
     if is_cold_storage:
         st.info("❄️ **Soğuk Zincir Rejimi Aktif:** Ürünlerinizin bozulmaması için yalnızca termokinli / frigofirik ve reefer araçlar listelenmektedir.")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Paletli Toplam Koli", f"{pallet_total_boxes:,} Adet", f"{total_pallets_in_v} Palet ({'Çift Kat' if double_stack else 'Tek Kat'})")
-    c2.metric("Dökme Toplam Koli", f"{total_loose_boxes:,} Adet", f"+%{extra_capacity_percent:.1f} Artış")
-    with c3:
+    c2.metric("Paletli Hacimsel Doluluk", f"%{pallet_vol_util:.1f}", f"{pallet_total_vol_m3:.1f} / {vehicle_volume_m3:.1f} m³")
+    c3.metric("Paletli Tonaj Doluluğu", f"%{pallet_weight_util:.1f}", f"{calc_pallet_weight:,.0f} / {v_info['max_payload_kg']:,} kg")
+    
+    with c4:
         if is_cold_storage:
-            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nSoğuk zincirde hava sirkülasyonu sağlamak ve ısı kaybını önlemek için kesinlikle paletli taşıma önerilir.")
+            st.success("💡 **ÖNERİLEN: PALETLİ**\nSoğuk hava sirkülasyonu için.")
         elif recommended_shipping == "Dökme Yükleme":
-            st.success("💡 **ÖNERİLEN: DÖKME YÜKLEME**\nDenizyolu konteyner navlunu optimizasyonu için dökme yükleme önerilir.")
+            st.success("💡 **ÖNERİLEN: DÖKME**\nNavlun optimizasyonu için.")
         else:
-            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nHızlı boşaltma ve deformasyonu önlemek için paletli taşıma önerilir.")
+            st.success("💡 **ÖNERİLEN: PALETLİ**\nHasarsız hızlı lojistik için.")
 
+    # Detaylı Doluluk Tablosu (Hacim & Miktar)
     st.table(pd.DataFrame([
         {
             "Yükleme Yöntemi": "Paletli Taşıma",
-            "Yüklenen Birim": f"{total_pallets_in_v} Palet ({pallet_total_boxes} Koli)",
-            "Toplam Ürün": f"{pallet_total_boxes * total_units_box:,} Adet",
-            "Toplam Yük Ağırlığı": f"{calc_pallet_weight:,.1f} kg",
-            "Araç Tonaj Doluluğu": f"%{(calc_pallet_weight / v_info['max_payload_kg'])*100:.1f}",
+            "Miktarsal Yükleme (Adet / Palet)": f"{pallet_total_boxes:,} Koli ({total_pallets_in_v} Palet - {pallet_total_boxes * total_units_box:,} Ürün)",
+            "Ağırlık Doluluğu (Tonaj)": f"%{pallet_weight_util:.1f} ({calc_pallet_weight:,.1f} kg / {v_info['max_payload_kg']:,} kg)",
+            "Hacimsel Doluluk (Kübaj)": f"%{pallet_vol_util:.1f} ({pallet_total_vol_m3:.1f} m³ / {vehicle_volume_m3:.1f} m³)",
             "Operasyonel Not": "Hızlı Boşaltma, Sıfır Hasar, Soğuk Hava Sirkülasyonu"
         },
         {
             "Yükleme Yöntemi": "Dökme (Loose Box) Taşıma",
-            "Yüklenen Birim": f"{total_loose_boxes} Koli",
-            "Toplam Ürün": f"{total_loose_boxes * total_units_box:,} Adet",
-            "Toplam Yük Ağırlığı": f"{calc_loose_weight:,.1f} kg",
-            "Araç Tonaj Doluluğu": f"%{(calc_loose_weight / v_info['max_payload_kg'])*100:.1f}",
+            "Miktarsal Yükleme (Adet / Palet)": f"{total_loose_boxes:,} Koli ({total_loose_boxes * total_units_box:,} Ürün) [++%{extra_capacity_percent:.1f}]",
+            "Ağırlık Doluluğu (Tonaj)": f"%{loose_weight_util:.1f} ({calc_loose_weight:,.1f} kg / {v_info['max_payload_kg']:,} kg)",
+            "Hacimsel Doluluk (Kübaj)": f"%{loose_vol_util:.1f} ({loose_total_vol_m3:.1f} m³ / {vehicle_volume_m3:.1f} m³)",
             "Operasyonel Not": "Maksimum Hacim / Konteyner Tasarrufu"
         }
     ]))
