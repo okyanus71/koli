@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Hacimsel & Miktarsal Doluluklu)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Koli İçi ve Palet 2B/3B Görselleştirmeli)
 """
 
 import streamlit as st
@@ -188,6 +188,50 @@ def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
     k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
     return go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, color=color, opacity=opacity, flatshading=True, showlegend=False)
+
+def draw_2d_box_contents(box_in_l, box_in_w, p_len, p_wid, nx, ny):
+    """Koli içi ürün taban yerleşim krokisi (2B)"""
+    fig = go.Figure()
+    fig.add_shape(type="rect", x0=0, y0=0, x1=box_in_l, y1=box_in_w, line=dict(color="#8c564b", width=3), fillcolor="#fbf0e4", opacity=0.5)
+    
+    cnt = 1
+    for i in range(nx):
+        for j in range(ny):
+            bx = i * p_len
+            by = j * p_wid
+            fig.add_shape(type="rect", x0=bx, y0=by, x1=bx+p_len, y1=by+p_wid, line=dict(color="#2ca02c", width=1.5), fillcolor="#74c476", opacity=0.8)
+            fig.add_annotation(x=bx+p_len/2, y=by+p_wid/2, text=f"Ü{cnt}", showarrow=False, font=dict(size=10, color="white"))
+            cnt += 1
+
+    fig.update_layout(
+        title=f"Koli İçi Kat Planı (2B) - {nx*ny} Ürün/Kat",
+        xaxis=dict(title="Koli İç Boyu (mm)", range=[-20, box_in_l + 20], scaleratio=1),
+        yaxis=dict(title="Koli İç Eni (mm)", range=[-20, box_in_w + 20], scaleratio=1),
+        height=380, margin=dict(l=10, r=10, t=35, b=10)
+    )
+    return fig
+
+def draw_3d_box_contents(box_in_l, box_in_w, box_in_h, p_len, p_wid, p_h, nx, ny, nz):
+    """Koli içi ürün yerleşim simülasyonu (3B)"""
+    fig = go.Figure()
+    # Koli Şeffaf Dış Hatları
+    fig.add_trace(create_box_mesh(0, 0, 0, box_in_l, box_in_w, box_in_h, color="#8c564b", opacity=0.15))
+    
+    for k in range(nz):
+        z0 = k * p_h
+        col = "#31a354" if k % 2 == 0 else "#74c476"
+        for i in range(nx):
+            for j in range(ny):
+                x0 = i * p_len
+                y0 = j * p_wid
+                fig.add_trace(create_box_mesh(x0, y0, z0, p_len-2, p_wid-2, p_h-2, color=col, opacity=0.85))
+
+    fig.update_layout(
+        title=f"3B Koli İçi Paketleme Simülasyonu ({nx*ny*nz} Adet Ürün)",
+        scene=dict(xaxis_title='Boy (X - mm)', yaxis_title='En (Y - mm)', zaxis_title='Yükseklik (Z - mm)', aspectmode='data'),
+        height=400, margin=dict(l=10, r=10, t=35, b=10)
+    )
+    return fig
 
 def get_boxes_2d_coords(pallet_l, pallet_w, box_l, box_w, pattern):
     coords = []
@@ -500,7 +544,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_mat)
     elements.append(Spacer(1, 6))
 
-    # 3. Palet ve Araç Doluluk Özeti (Hacimsel & Miktarsal)
+    # 3. Palet ve Araç Doluluk Özeti
     elements.append(Paragraph(tr_fix("3. Palet ve Taşıt Doluluk / Kapasite Analizi (Hacimsel & Miktarsal)"), h2_style))
     log_data = [
         [
@@ -709,7 +753,7 @@ total_pallet_gross = (total_boxes_pallet * gross_box_kg) + 25
 pallet_coords = get_boxes_2d_coords(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, selected_pattern)
 pallet_full_h = 145 + (layers_per_pallet * box_out_h)
 
-# --- ARAÇ & DOLULUK HESAPLAMALARI (HACİM & MİKTAR) ---
+# --- ARAÇ & DOLULUK HESAPLAMALARI ---
 v_info = VEHICLE_DATABASE[active_vehicle]
 vehicle_volume_m3 = (v_info["length"] * v_info["width"] * v_info["height"]) / 1_000_000_000
 single_box_vol_m3 = (box_out_l * box_out_w * box_out_h) / 1_000_000_000
@@ -730,7 +774,6 @@ pallet_total_vol_m3 = total_pallets_in_v * single_pallet_vol_m3
 pallet_weight_util = (calc_pallet_weight / v_info["max_payload_kg"]) * 100
 pallet_vol_util = (pallet_total_vol_m3 / vehicle_volume_m3) * 100
 
-# Dökme Hesap
 loose_nx1 = int(v_info["length"] // box_out_l) * int(v_info["width"] // box_out_w) * int(v_info["height"] // box_out_h)
 loose_nx2 = int(v_info["length"] // box_out_w) * int(v_info["width"] // box_out_l) * int(v_info["height"] // box_out_h)
 max_loose_vol_boxes = max(loose_nx1, loose_nx2)
@@ -749,7 +792,7 @@ loose_vol_util = (loose_total_vol_m3 / vehicle_volume_m3) * 100
 extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
 recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20 and not is_cold_storage) else "Paletli Yükleme"
 
-# PDF Paketi Hazırlığı
+# PDF Paketi
 pdf_product_dict = {
     'l': int(p_length), 'w': int(p_width), 'h': int(p_height),
     'weight': int(p_weight), 'units': total_units_box,
@@ -829,7 +872,7 @@ with nav_col2:
     if cur_step == 2:
         st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Palet Krokisi & 3B İstif</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Koli İçi & Palet 2B/3B</div>", unsafe_allow_html=True)
 
 with nav_col3:
     btn_type3 = "primary" if cur_step == 3 else "secondary"
@@ -912,45 +955,79 @@ if cur_step == 1:
     st.write("")
     _, col_next = st.columns([4, 1.2])
     with col_next:
-        st.button("📦 2. Adıma Geç (Palet Dizilimi) ➡️", type="primary", use_container_width=True, on_click=set_step, args=(2,))
+        st.button("📦 2. Adıma Geç (Dizilimler) ➡️", type="primary", use_container_width=True, on_click=set_step, args=(2,))
 
 # ==============================================================================
-# === EKRAN 2: PALET VE KOLİ DİZİLİMİ ===
+# === EKRAN 2: KOLİ İÇİ DİZİLİMİ VE PALET DİZİLİMİ (2B & 3B) ===
 # ==============================================================================
 elif cur_step == 2:
-    st.subheader(f"📦 2. Adım: Koli & Palet Yerleşim Simülasyonu ({active_pallet})")
-    c_p1, c_p2, c_p3, c_p4 = st.columns(4)
-    c_p1.metric("Koli Dış Ölçüleri", f"{int(box_out_l)}x{int(box_out_w)}x{int(box_out_h)} mm")
-    c_p2.metric("Koli Brüt Ağırlık", f"{gross_box_kg:.2f} kg")
-    c_p3.metric("1 Paletteki Koli", f"{total_boxes_pallet} Adet", f"{layers_per_pallet} Kat")
-    c_p4.metric("Koli İçi Hacim Doluluğu", f"%{box_fill_rate:.1f}", f"Boşluk: %{100-box_fill_rate:.1f}")
+    st.subheader("📦 2. Adım: Koli İçi ve Palet Yerleşim Simülasyonu")
+    
+    # İki Alt Sekme (Koli İçi vs Palet Üstü)
+    tab_koli, tab_palet = st.tabs(["📦 Koli İçi Ürün Dizilimi (2B / 3B)", "🏗️ Palet Üzeri Koli Dizilimi (2B / 3B)"])
 
-    col_pat_left, col_pat_right = st.columns([1, 1.2])
-    with col_pat_left:
-        st.markdown("**Palet Taban Dizilim Alternatifleri:**")
-        pattern_names = [f"{p['name']} ({p['count']} Koli/Kat - %{p['efficiency']:.1f} Verim)" for p in patterns]
-        selected_pat_idx = st.radio("Dizilim Şekli Seçin:", range(len(patterns)), format_func=lambda x: pattern_names[x])
-        active_pattern = patterns[selected_pat_idx]
+    # --- ALT SEKME 1: KOLİ İÇİ ÜRÜN DİZİLİMİ ---
+    with tab_koli:
+        ck1, ck2, ck3, ck4 = st.columns(4)
+        ck1.metric("Koli İç Ölçüleri", f"{int(box_in_l)}x{int(box_in_w)}x{int(box_in_h)} mm")
+        ck2.metric("Koli İçi Toplam Ürün", f"{total_units_box} Adet", f"{nx}x{ny} Tabanda x {nz} Kat")
+        ck3.metric("Koli Net İçerik Ağırlığı", f"{net_contents_kg:.2f} kg", f"1 Ürün: {p_weight} g")
+        ck4.metric("Koli Hacimsel Doluluk", f"%{box_fill_rate:.1f}", f"Boşluk Payı: %{100-box_fill_rate:.1f}")
 
-        active_total_boxes = active_pattern["count"] * layers_per_pallet
-        active_pallet_gross = (active_total_boxes * gross_box_kg) + 25
+        col_koli_l, col_koli_r = st.columns([1, 1.2])
+        with col_koli_l:
+            st.info(f"""
+            **Birincil Ürün & Koli İçi Matris Bilgileri:**
+            * **Ürün Ölçüleri:** `{int(p_length)} x {int(p_width)} x {int(p_height)} mm`
+            * **X Ekseni (Boyuna):** `{nx} Adet`
+            * **Y Ekseni (Enine):** `{ny} Adet`
+            * **Z Ekseni (Dikey Kat):** `{nz} Kat`
+            * **Koli İçi Boşluk Payı:** `+4 mm (Tolerans)`
+            * **Koli Dış Ölçüleri:** `{int(box_out_l)} x {int(box_out_w)} x {int(box_out_h)} mm`
+            """)
+            view_mode_box = st.radio("Koli Görünüm Formatı:", ["3B Koli İç Görünümü", "2B Koli Kat Krokisi"], horizontal=True, key="view_mode_box_radio")
 
-        st.info(f"""
-        * **Kat Başına Koli:** `{active_pattern['count']} Adet` ({active_pattern['desc']})
-        * **Palet Üzeri Toplam Koli:** `{active_total_boxes} Adet` ({active_total_boxes * total_units_box:,} Ürün)
-        * **Palet Brüt Ağırlığı:** `{active_pallet_gross:.1f} kg`
-        * **Palet Taban Alanı Doluluğu:** `%{active_pattern['efficiency']:.1f}`
-        * **1 Palet Toplam Hacmi:** `{single_pallet_vol_m3:.2f} m³`
-        """)
+        with col_koli_r:
+            if view_mode_box == "2B Koli Kat Krokisi":
+                fig_2d_box = draw_2d_box_contents(box_in_l, box_in_w, p_length, p_width, nx, ny)
+                st.plotly_chart(fig_2d_box, use_container_width=True)
+            else:
+                fig_3d_box = draw_3d_box_contents(box_in_l, box_in_w, box_in_h, p_length, p_width, p_height, nx, ny, nz)
+                st.plotly_chart(fig_3d_box, use_container_width=True)
 
-    with col_pat_right:
-        view_mode_pallet = st.radio("Görünüm Modu:", ["2B Kat Planı", "3B Palet Modeli"], horizontal=True)
-        if view_mode_pallet == "2B Kat Planı":
-            fig_2d_p = draw_2d_pallet_layout(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, active_pattern)
-            st.plotly_chart(fig_2d_p, use_container_width=True)
-        else:
-            fig_3d_p = draw_3d_pallet_stack(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, box_out_h, layers_per_pallet, active_pattern)
-            st.plotly_chart(fig_3d_p, use_container_width=True)
+    # --- ALT SEKME 2: PALET DİZİLİMİ ---
+    with tab_palet:
+        cp1, cp2, cp3, cp4 = st.columns(4)
+        cp1.metric("Koli Dış Ölçüleri", f"{int(box_out_l)}x{int(box_out_w)}x{int(box_out_h)} mm")
+        cp2.metric("Koli Brüt Ağırlık", f"{gross_box_kg:.2f} kg")
+        cp3.metric("1 Paletteki Koli", f"{total_boxes_pallet} Adet", f"{layers_per_pallet} Kat")
+        cp4.metric("Palet Taban Doluluğu", f"%{selected_pattern['efficiency']:.1f}", f"Hacim: {single_pallet_vol_m3:.2f} m³")
+
+        col_pat_left, col_pat_right = st.columns([1, 1.2])
+        with col_pat_left:
+            st.markdown("**Palet Taban Dizilim Alternatifleri:**")
+            pattern_names = [f"{p['name']} ({p['count']} Koli/Kat - %{p['efficiency']:.1f} Verim)" for p in patterns]
+            selected_pat_idx = st.radio("Dizilim Şekli Seçin:", range(len(patterns)), format_func=lambda x: pattern_names[x])
+            active_pattern = patterns[selected_pat_idx]
+
+            active_total_boxes = active_pattern["count"] * layers_per_pallet
+            active_pallet_gross = (active_total_boxes * gross_box_kg) + 25
+
+            st.info(f"""
+            * **Kat Başına Koli:** `{active_pattern['count']} Adet` ({active_pattern['desc']})
+            * **Palet Üzeri Toplam Koli:** `{active_total_boxes} Adet` ({active_total_boxes * total_units_box:,} Ürün)
+            * **Palet Brüt Ağırlığı:** `{active_pallet_gross:.1f} kg`
+            * **Taban Doluluk Oranı:** `%{active_pattern['efficiency']:.1f}`
+            """)
+            view_mode_pallet = st.radio("Palet Görünüm Formatı:", ["2B Kat Planı", "3B Palet Modeli"], horizontal=True, key="view_mode_pallet_radio")
+
+        with col_pat_right:
+            if view_mode_pallet == "2B Kat Planı":
+                fig_2d_p = draw_2d_pallet_layout(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, active_pattern)
+                st.plotly_chart(fig_2d_p, use_container_width=True)
+            else:
+                fig_3d_p = draw_3d_pallet_stack(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, box_out_h, layers_per_pallet, active_pattern)
+                st.plotly_chart(fig_3d_p, use_container_width=True)
 
     st.write("")
     col_prev, _, col_next = st.columns([1.2, 2.6, 1.2])
@@ -981,7 +1058,6 @@ elif cur_step == 3:
         else:
             st.success("💡 **ÖNERİLEN: PALETLİ**\nHasarsız hızlı lojistik için.")
 
-    # Detaylı Doluluk Tablosu (Hacim & Miktar)
     st.table(pd.DataFrame([
         {
             "Yükleme Yöntemi": "Paletli Taşıma",
@@ -1016,7 +1092,7 @@ elif cur_step == 3:
     st.write("")
     col_prev, _, _ = st.columns([1.2, 2.6, 1.2])
     with col_prev:
-        st.button("⬅️ 2. Adıma Dön (Palet)", use_container_width=True, on_click=set_step, args=(2,))
+        st.button("⬅️ 2. Adıma Dön (Dizilimler)", use_container_width=True, on_click=set_step, args=(2,))
 
 # Alt Bilgi (Footer)
 st.divider()
