@@ -1,6 +1,6 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği (Hedef BCT/ECT Tabanlı) & Lojistik Optimizatörü
-Platform: Python + Streamlit + Plotly 2D + ReportLab PDF Export (Türkçe Karakter Uyumlu)
+Platform: Python + Streamlit + Plotly 2D + ReportLab PDF Export (Türkçe Karakter Uyumlu + Stok/Koli Bilgisi)
 """
 
 import streamlit as st
@@ -9,7 +9,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import math
 import io
-import os
+import re
 from datetime import datetime
 
 # PDF Üretim Kütüphaneleri
@@ -17,9 +17,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
 st.set_page_config(
     page_title="Koli Mukavemet & Palet Optimizatörü",
@@ -218,10 +215,9 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
     )
     return fig
 
-# --- TÜRKÇE KARAKTER UYUMLU PDF ÜRETİMİ ---
+# --- TÜRKÇE KARAKTER UYUMLU PDF FONKSİYONU ---
 
 def tr_fix(text):
-    """ReportLab Helvetica fontunda siyah kutu çıkmasını önleyen Türkçe karakter dönüştürücü"""
     if not isinstance(text, str):
         text = str(text)
     mapping = {
@@ -245,10 +241,29 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
 
     elements = []
 
-    # Başlık
     elements.append(Paragraph(tr_fix("GIDA AMBALAJI KOLİ MUKAVEMET VE LOJİSTİK RAPORU"), title_style))
     elements.append(Paragraph(tr_fix(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 10))
+
+    # Koli / Stok Tanımlama Başlığı (Varsa ekle)
+    box_name_disp = prod_info.get('box_name', '').strip()
+    box_code_disp = prod_info.get('box_code', '').strip()
+    if box_name_disp or box_code_disp:
+        name_str = box_name_disp if box_name_disp else "Belirtilmedi"
+        code_str = box_code_disp if box_code_disp else "Belirtilmedi"
+        id_table_data = [
+            [Paragraph(tr_fix(f"<b>Koli / Ürün Adı:</b> {name_str}"), normal_style),
+             Paragraph(tr_fix(f"<b>Koli Stok Kodu (SKU):</b> {code_str}"), normal_style)]
+        ]
+        t_id = Table(id_table_data, colWidths=[265, 265])
+        t_id.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')),
+            ('TOPPADDING', (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ]))
+        elements.append(t_id)
+        elements.append(Spacer(1, 6))
 
     # 1. Girdi Bilgileri
     elements.append(Paragraph(tr_fix("1. Temel Girdi Parametreleri ve Depolama Koşulları"), h2_style))
@@ -294,7 +309,6 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_rec)
     elements.append(Spacer(1, 8))
 
-    # Matris Tablosu (Renkli ve Açıklayıcı Durum Değerlendirmesi)
     mat_headers = ["Mukavva Tipi", "Kalınlık", "Mevcut ECT", "Min. ECT", "BCT", "Hedef BCT", "Durum ve Değerlendirme"]
     mat_rows = [[Paragraph(tr_fix(f"<b>{h}</b>"), bold_style) for h in mat_headers]]
     
@@ -302,24 +316,17 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         if item['key'] == active_eval['key'] and item['is_safe']:
             status_text = f"EN UYGUN ({item['safety_margin']:.2f}x)"
             st_color = '#155724'
-            st_bg = '#d4edda'
         elif not item['is_safe']:
             status_text = f"YETERSIZ / RISKLI ({item['safety_margin']:.2f}x)"
             st_color = '#721c24'
-            st_bg = '#f8d7da'
         elif item['safety_margin'] >= 2.0:
             status_text = f"ASIRI GUCLU / MALIYETLI ({item['safety_margin']:.2f}x)"
             st_color = '#004085'
-            st_bg = '#cce5ff'
         else:
             status_text = f"UYGUN ({item['safety_margin']:.2f}x)"
             st_color = '#383d41'
-            st_bg = '#e2e3e5'
 
-        status_paragraph = Paragraph(
-            f"<font color='{st_color}'><b>{tr_fix(status_text)}</b></font>",
-            normal_style
-        )
+        status_paragraph = Paragraph(f"<font color='{st_color}'><b>{tr_fix(status_text)}</b></font>", normal_style)
 
         mat_rows.append([
             Paragraph(tr_fix(item['name']), normal_style),
@@ -373,9 +380,13 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     buf.seek(0)
     return buf.getvalue()
 
-# --- SIDEBAR ---
+# --- SIDEBAR GİRDİLERİ ---
 
 with st.sidebar:
+    st.header("🏷️ Koli Tanımlama (İsteğe Bağlı)")
+    box_name_input = st.text_input("Koli / Ürün Adı", placeholder="Örn: 500g Salça Kolisi", help="Rapor başlığında ve dosya adında görünür.")
+    box_code_input = st.text_input("Koli Stok Kodu (SKU)", placeholder="Örn: KL-SL-500-01", help="Üretim/depo takip kodunuz.")
+
     st.header("1. Birincil Ürün Bilgileri")
     p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=120.0, step=5.0)
     p_width = st.number_input("Ürün Eni (Y - mm)", min_value=10.0, value=80.0, step=5.0)
@@ -533,12 +544,14 @@ else:
 extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
 recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20) else "Paletli Yükleme"
 
-# PDF Veri Paketleri
+# PDF Paketi Hazırlığı
 pdf_product_dict = {
     'l': int(p_length), 'w': int(p_width), 'h': int(p_height),
     'weight': int(p_weight), 'units': total_units_box,
     'nx': int(nx), 'ny': int(ny), 'nz': int(nz),
-    'net_kg': net_contents_kg
+    'net_kg': net_contents_kg,
+    'box_name': box_name_input,
+    'box_code': box_code_input
 }
 pdf_storage_dict = {
     'env_name': env_choice, 'rh': humidity_rh,
@@ -561,18 +574,24 @@ pdf_bytes = generate_pdf_report(
     board_evaluations, pdf_pallet_dict, pdf_vehicle_dict
 )
 
+# Dosya adını temizleme (Örn: SKU veya Koli adı varsa dosya adına ekle)
+safe_sku = re.sub(r'[^a-zA-Z0-9_-]', '_', box_code_input.strip()) if box_code_input else ""
+pdf_file_title = f"Koli_Raporu_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Koli_Mukavemet_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+
 # --- ANA EKRAN ---
 
 col_head, col_btn = st.columns([3, 1])
 with col_head:
-    st.title("🔬 Gıda Koli Mukavemet & Lojistik Mühendisliği")
-    st.caption("Hedef BCT/ECT mukavemetini hesaplayın, en uygun mukavvayı ve lojistik yerleşimini belirleyin.")
+    main_title_str = f"🔬 {box_name_input} - Mukavemet & Lojistik Raporu" if box_name_input.strip() else "🔬 Gıda Koli Mukavemet & Lojistik Mühendisliği"
+    st.title(main_title_str)
+    subtitle_str = f"**Stok Kodu (SKU):** `{box_code_input}` | " if box_code_input.strip() else ""
+    st.caption(f"{subtitle_str}Hedef BCT/ECT mukavemetini hesaplayın, en uygun mukavvayı ve lojistik yerleşimini belirleyin.")
 with col_btn:
     st.write("")
     st.download_button(
         label="📥 PDF Raporunu İndir",
         data=pdf_bytes,
-        file_name=f"Koli_Mukavemet_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+        file_name=pdf_file_title,
         mime="application/pdf",
         use_container_width=True
     )
