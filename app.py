@@ -1,6 +1,6 @@
 """
-Gıda Ambalajı Koli Mukavemet Mühendisliği (Hedef BCT/ECT Tabanlı) & Lojistik Optimizatörü
-Platform: Python + Streamlit + Plotly 2D + ReportLab PDF Export (Türkçe Karakter Uyumlu + Stok/Koli Bilgisi)
+Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
+Platform: Python + Streamlit + Plotly 2D/3D + ReportLab PDF
 """
 
 import streamlit as st
@@ -12,14 +12,13 @@ import io
 import re
 from datetime import datetime
 
-# PDF Üretim Kütüphaneleri
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 st.set_page_config(
-    page_title="Koli Mukavemet & Palet Optimizatörü",
+    page_title="Koli Mukavemet, Palet & Araç 3D Optimizatörü",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -92,27 +91,15 @@ VEHICLE_DATABASE = {
     }
 }
 
-STACK_OPTIONS = [
-    "Kolon (Üst Üste - %100 Direnç)",
-    "Kilitli / Çapraz (%45 Kayıp)"
-]
-
-PALLET_OPTIONS = [
-    "Euro Palet (1200 x 800 mm)",
-    "Standart Palet (1200 x 1000 mm)"
-]
-
+STACK_OPTIONS = ["Kolon (Üst Üste - %100 Direnç)", "Kilitli / Çapraz (%45 Kayıp)"]
+PALLET_OPTIONS = ["Euro Palet (1200 x 800 mm)", "Standart Palet (1200 x 1000 mm)"]
 VEHICLE_OPTIONS = list(VEHICLE_DATABASE.keys())
 
 # --- SESSION STATE SENKRONİZASYONU ---
-if "stacking_pattern_state" not in st.session_state:
-    st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
-if "pallet_choice_state" not in st.session_state:
-    st.session_state["pallet_choice_state"] = PALLET_OPTIONS[0]
-if "max_pallet_h_state" not in st.session_state:
-    st.session_state["max_pallet_h_state"] = 1750
-if "vehicle_choice_state" not in st.session_state:
-    st.session_state["vehicle_choice_state"] = VEHICLE_OPTIONS[0]
+if "stacking_pattern_state" not in st.session_state: st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
+if "pallet_choice_state" not in st.session_state: st.session_state["pallet_choice_state"] = PALLET_OPTIONS[0]
+if "max_pallet_h_state" not in st.session_state: st.session_state["max_pallet_h_state"] = 1750
+if "vehicle_choice_state" not in st.session_state: st.session_state["vehicle_choice_state"] = VEHICLE_OPTIONS[0]
 
 def sync_pattern_sb(): st.session_state["stacking_pattern_state"] = st.session_state["sb_pattern"]
 def sync_pattern_main(): st.session_state["stacking_pattern_state"] = st.session_state["main_pattern"]
@@ -123,7 +110,7 @@ def sync_height_main(): st.session_state["max_pallet_h_state"] = st.session_stat
 def sync_vehicle_sb(): st.session_state["vehicle_choice_state"] = st.session_state["sb_vehicle"]
 def sync_vehicle_main(): st.session_state["vehicle_choice_state"] = st.session_state["main_vehicle"]
 
-# --- HESAPLAMA VE GÖRSELLEŞTİRME ---
+# --- HESAPLAMA VE 2D/3D GÖRSELLEŞTİRME ---
 
 def calculate_environmental_safety_factor(temp_factor, humidity_rh, storage_days, stacking_pattern, overhang):
     h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.30 if humidity_rh <= 75 else (1.55 if humidity_rh <= 85 else 1.95)))
@@ -179,139 +166,213 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
     patterns.sort(key=lambda x: (x["count"], x["efficiency"]), reverse=True)
     return patterns
 
-def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
-    fig = go.Figure()
-    fig.add_shape(type="rect", x0=0, y0=0, x1=pallet_l, y1=pallet_w, line=dict(color="#8c564b", width=3), fillcolor="#d7ccc8", opacity=0.4)
-    boxes_coords = []
+def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
+    """3D Plotly için prizma Mesh nesnesi oluşturur"""
+    x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
+    y = [y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy]
+    z = [z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz]
+    i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
+    j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
+    k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
+    return go.Mesh3d(x=x, y=y, z=z, i=i, j=j, k=k, color=color, opacity=opacity, flatshading=True, showlegend=False)
+
+def get_boxes_2d_coords(pallet_l, pallet_w, box_l, box_w, pattern):
+    coords = []
     p_type = pattern["type"]
     if p_type == "align_l":
         for i in range(pattern["nx"]):
             for j in range(pattern["ny"]):
-                boxes_coords.append((i * box_l, j * box_w, box_l, box_w))
+                coords.append((i * box_l, j * box_w, box_l, box_w))
     elif p_type == "align_w":
         for i in range(pattern["nx"]):
             for j in range(pattern["ny"]):
-                boxes_coords.append((i * box_w, j * box_l, box_w, box_l))
+                coords.append((i * box_w, j * box_l, box_w, box_l))
     elif p_type == "hybrid":
         s_x, ny1 = pattern["p1"]
         nx2, ny2 = pattern["p2"]
         for i in range(s_x):
             for j in range(ny1):
-                boxes_coords.append((i * box_l, j * box_w, box_l, box_w))
+                coords.append((i * box_l, j * box_w, box_l, box_w))
         offset_x = s_x * box_l
         for i in range(nx2):
             for j in range(ny2):
-                boxes_coords.append((offset_x + (i * box_w), j * box_l, box_w, box_l))
+                coords.append((offset_x + (i * box_w), j * box_l, box_w, box_l))
+    return coords
 
-    for idx, (bx, by, bw, bh) in enumerate(boxes_coords):
+def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
+    fig = go.Figure()
+    fig.add_shape(type="rect", x0=0, y0=0, x1=pallet_l, y1=pallet_w, line=dict(color="#8c564b", width=3), fillcolor="#d7ccc8", opacity=0.4)
+    coords = get_boxes_2d_coords(pallet_l, pallet_w, box_l, box_w, pattern)
+    for idx, (bx, by, bw, bh) in enumerate(coords):
         fig.add_shape(type="rect", x0=bx, y0=by, x1=bx+bw, y1=by+bh, line=dict(color="#1f77b4", width=1.5), fillcolor="#6baed6", opacity=0.7)
         fig.add_annotation(x=bx + bw/2, y=by + bh/2, text=str(idx+1), showarrow=False, font=dict(size=10, color="white"))
-
     fig.update_layout(
-        title=f"Palet Kat Dizilimi ({pattern['count']} Koli/Kat - Doluluk: %{pattern['efficiency']:.1f})",
-        xaxis=dict(title="Palet Boyu (mm)", range=[-50, pallet_l + 50], scaleratio=1),
-        yaxis=dict(title="Palet Eni (mm)", range=[-50, pallet_w + 50], scaleratio=1),
-        width=560, height=400, margin=dict(l=20, r=20, t=40, b=20)
+        title=f"Palet Kat Planı (2D) - {pattern['count']} Koli/Kat",
+        xaxis=dict(title="Boy (mm)", range=[-50, pallet_l + 50], scaleratio=1),
+        yaxis=dict(title="En (mm)", range=[-50, pallet_w + 50], scaleratio=1),
+        height=380, margin=dict(l=10, r=10, t=35, b=10)
     )
     return fig
 
-# --- TÜRKÇE KARAKTER UYUMLU PDF FONKSİYONU ---
+def draw_3d_pallet_stack(pallet_l, pallet_w, box_l, box_w, box_h, layers, pattern):
+    fig = go.Figure()
+    # Ahşap Palet Tabanı (145 mm yükseklik)
+    fig.add_trace(create_box_mesh(0, 0, 0, pallet_l, pallet_w, 145, color="#a1887f", opacity=0.9))
+    coords = get_boxes_2d_coords(pallet_l, pallet_w, box_l, box_w, pattern)
+    
+    # Katları istifle
+    for l in range(layers):
+        z_curr = 145 + (l * box_h)
+        col = "#1f77b4" if l % 2 == 0 else "#2ca02c"
+        for bx, by, bw, bh in coords:
+            fig.add_trace(create_box_mesh(bx, by, z_curr, bw, bh, box_h, color=col, opacity=0.85))
+
+    fig.update_layout(
+        title=f"3D Palet İstif Simülasyonu ({layers} Kat - Toplam {len(coords)*layers} Koli)",
+        scene=dict(
+            xaxis_title='Boy (X - mm)',
+            yaxis_title='En (Y - mm)',
+            zaxis_title='Yükseklik (Z - mm)',
+            aspectmode='data'
+        ),
+        height=400, margin=dict(l=10, r=10, t=35, b=10)
+    )
+    return fig
+
+def draw_2d_vehicle_layout(v_len, v_wid, is_palletized, p_len, p_wid, b_len, b_wid, total_units):
+    """Araç Kasa Tabanı 2D Yerleşim Krokisi"""
+    fig = go.Figure()
+    fig.add_shape(type="rect", x0=0, y0=0, x1=v_len, y1=v_wid, line=dict(color="#333", width=3), fillcolor="#eceff1", opacity=0.5)
+    
+    if is_palletized:
+        # Paletlerin yerleşimi
+        cols = int(v_len // p_len)
+        rows = int(v_wid // p_wid)
+        idx = 1
+        for i in range(cols):
+            for j in range(rows):
+                if idx <= total_units:
+                    bx, by = i * p_len, j * p_wid
+                    fig.add_shape(type="rect", x0=bx, y0=by, x1=bx+p_len, y1=by+p_wid, line=dict(color="#d95f02", width=1.5), fillcolor="#fdae6b", opacity=0.8)
+                    fig.add_annotation(x=bx+p_len/2, y=by+p_wid/2, text=f"P{idx}", showarrow=False, font=dict(size=9, color="black"))
+                    idx += 1
+    else:
+        # Dökme koli taban yerleşimi
+        cols = int(v_len // b_len)
+        rows = int(v_wid // b_wid)
+        for i in range(min(cols, 25)):
+            for j in range(rows):
+                bx, by = i * b_len, j * b_wid
+                fig.add_shape(type="rect", x0=bx, y0=by, x1=bx+b_len, y1=by+b_wid, line=dict(color="#1f77b4", width=1), fillcolor="#9ecae1", opacity=0.7)
+
+    fig.update_layout(
+        title=f"Araç/Konteyner Taban Krokisi (2D) - {'Paletli Düzen' if is_palletized else 'Dökme Taban Düzeni'}",
+        xaxis=dict(title="Kasa Uzunluğu (mm)", range=[-200, v_len + 200], scaleratio=1),
+        yaxis=dict(title="Kasa Genişliği (mm)", range=[-200, v_wid + 200], scaleratio=1),
+        height=340, margin=dict(l=10, r=10, t=35, b=10)
+    )
+    return fig
+
+def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_total_h, double_stack, b_len, b_wid, b_h, total_items):
+    """Araç Kasa Hacmi ve Yükleme 3D Simülasyonu"""
+    fig = go.Figure()
+    
+    # Araç Kasa İskeleti (Saydam Kutu)
+    fig.add_trace(create_box_mesh(0, 0, 0, v_len, v_wid, v_h, color="#90a4ae", opacity=0.15))
+    
+    if is_palletized:
+        cols = int(v_len // p_len)
+        rows = int(v_wid // p_wid)
+        stack_layers = 2 if double_stack else 1
+        cnt = 0
+        for i in range(cols):
+            for j in range(rows):
+                for s in range(stack_layers):
+                    if cnt < total_items:
+                        x0 = i * p_len
+                        y0 = j * p_wid
+                        z0 = s * p_total_h
+                        fig.add_trace(create_box_mesh(x0, y0, z0, p_len, p_wid, p_total_h - 10, color="#f57c00" if s==0 else "#e65100", opacity=0.75))
+                        cnt += 1
+    else:
+        # Dökme blok gösterimi
+        cols = int(v_len // b_len)
+        rows = int(v_wid // b_wid)
+        levels = int(v_h // b_h)
+        # Performans için kümelenmiş blok göster
+        step_c = max(1, cols // 15)
+        for i in range(0, cols, step_c):
+            for j in range(rows):
+                for k in range(levels):
+                    fig.add_trace(create_box_mesh(i * b_len, j * b_wid, k * b_h, b_len * step_c, b_wid, b_h, color="#1f77b4", opacity=0.6))
+
+    fig.update_layout(
+        title=f"3D Kasa/Konteyner Yükleme Hacmi ({'Paletli Taşıma' if is_palletized else 'Dökme Taşıma'})",
+        scene=dict(
+            xaxis_title='Uzunluk (X - mm)',
+            yaxis_title='Genişlik (Y - mm)',
+            zaxis_title='Yükseklik (Z - mm)',
+            aspectmode='data'
+        ),
+        height=420, margin=dict(l=10, r=10, t=35, b=10)
+    )
+    return fig
+
+# --- TÜRKÇE KARAKTER UYUMLU PDF ---
 
 def tr_fix(text):
-    if not isinstance(text, str):
-        text = str(text)
-    mapping = {
-        'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S',
-        'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U',
-        'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
-    }
-    for k, v in mapping.items():
-        text = text.replace(k, v)
+    if not isinstance(text, str): text = str(text)
+    mapping = {'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S', 'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'}
+    for k, v in mapping.items(): text = text.replace(k, v)
     return text
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
-    
     title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], fontSize=15, leading=19, textColor=colors.HexColor('#1f77b4'), alignment=1)
     h2_style = ParagraphStyle('SectionHeader', parent=styles['Heading2'], fontSize=10.5, leading=14, textColor=colors.HexColor('#003366'), spaceBefore=8, spaceAfter=4)
     normal_style = ParagraphStyle('ReportBody', parent=styles['Normal'], fontSize=8.5, leading=11)
     bold_style = ParagraphStyle('ReportBold', parent=styles['Normal'], fontSize=8.5, leading=11, fontName='Helvetica-Bold')
 
     elements = []
-
     elements.append(Paragraph(tr_fix("GIDA AMBALAJI KOLİ MUKAVEMET VE LOJİSTİK RAPORU"), title_style))
     elements.append(Paragraph(tr_fix(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 10))
 
-    # Koli / Stok Tanımlama Başlığı (Varsa ekle)
     box_name_disp = prod_info.get('box_name', '').strip()
     box_code_disp = prod_info.get('box_code', '').strip()
     if box_name_disp or box_code_disp:
         name_str = box_name_disp if box_name_disp else "Belirtilmedi"
         code_str = box_code_disp if box_code_disp else "Belirtilmedi"
-        id_table_data = [
-            [Paragraph(tr_fix(f"<b>Koli / Ürün Adı:</b> {name_str}"), normal_style),
-             Paragraph(tr_fix(f"<b>Koli Stok Kodu (SKU):</b> {code_str}"), normal_style)]
-        ]
+        id_table_data = [[Paragraph(tr_fix(f"<b>Koli / Ürün Adı:</b> {name_str}"), normal_style), Paragraph(tr_fix(f"<b>Koli Stok Kodu (SKU):</b> {code_str}"), normal_style)]]
         t_id = Table(id_table_data, colWidths=[265, 265])
-        t_id.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')),
-            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')),
-            ('TOPPADDING', (0,0), (-1,-1), 4),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-        ]))
+        t_id.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')), ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')), ('TOPPADDING', (0,0), (-1,-1), 4), ('BOTTOMPADDING', (0,0), (-1,-1), 4)]))
         elements.append(t_id)
         elements.append(Spacer(1, 6))
 
-    # 1. Girdi Bilgileri
     elements.append(Paragraph(tr_fix("1. Temel Girdi Parametreleri ve Depolama Koşulları"), h2_style))
     input_data = [
-        [Paragraph(tr_fix("<b>Birincil Ürün Ölçüleri:</b>"), normal_style), f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", 
-         Paragraph(tr_fix("<b>Depolama Rejimi:</b>"), normal_style), tr_fix(storage_info['env_name'])],
-        [Paragraph(tr_fix("<b>Ürün Birim Ağırlığı:</b>"), normal_style), f"{prod_info['weight']} g", 
-         Paragraph(tr_fix("<b>Depo Bağıl Nemi:</b>"), normal_style), f"%{storage_info['rh']} RH"],
-        [Paragraph(tr_fix("<b>Koli İçi Adet:</b>"), normal_style), tr_fix(f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})"), 
-         Paragraph(tr_fix("<b>Depolama Süresi:</b>"), normal_style), tr_fix(f"{storage_info['days']} Gün")],
-        [Paragraph(tr_fix("<b>Koli Net / Brüt Ağırlık:</b>"), normal_style), f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", 
-         Paragraph(tr_fix("<b>İstif Deseni:</b>"), normal_style), tr_fix(storage_info['pattern'])]
+        [Paragraph(tr_fix("<b>Birincil Ürün Ölçüleri:</b>"), normal_style), f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", Paragraph(tr_fix("<b>Depolama Rejimi:</b>"), normal_style), tr_fix(storage_info['env_name'])],
+        [Paragraph(tr_fix("<b>Ürün Birim Ağırlığı:</b>"), normal_style), f"{prod_info['weight']} g", Paragraph(tr_fix("<b>Depo Bağıl Nemi:</b>"), normal_style), f"%{storage_info['rh']} RH"],
+        [Paragraph(tr_fix("<b>Koli İçi Adet:</b>"), normal_style), tr_fix(f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})"), Paragraph(tr_fix("<b>Depolama Süresi:</b>"), normal_style), tr_fix(f"{storage_info['days']} Gün")],
+        [Paragraph(tr_fix("<b>Koli Net / Brüt Ağırlık:</b>"), normal_style), f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", Paragraph(tr_fix("<b>İstif Deseni:</b>"), normal_style), tr_fix(storage_info['pattern'])]
     ]
     t_input = Table(input_data, colWidths=[125, 135, 120, 150])
-    t_input.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-    ]))
+    t_input.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 3), ('BOTTOMPADDING', (0,0), (-1,-1), 3)]))
     elements.append(t_input)
     elements.append(Spacer(1, 10))
 
-    # 2. Mukavemet ve Değerlendirme
     elements.append(Paragraph(tr_fix("2. Hedef Mukavemet & Mukavva Kalitesi Değerlendirmesi"), h2_style))
     b_out = active_eval['box_out_dims']
-    rec_text = tr_fix(
-        f"<b>ÖNERİLEN MUKAVVA YAPISI: {active_eval['key']}</b><br/>"
-        f"Hesaplanan Koli Dış Ölçüleri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b><br/>"
-        f"Hedef BCT: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | "
-        f"Sağlanan BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> | "
-        f"Gereken Min. ECT: <b>{active_eval['req_min_ect']:.2f} kN/m</b> | "
-        f"Güvenlik Payı: <b>{active_eval['safety_margin']:.2f}x</b>"
-    )
+    rec_text = tr_fix(f"<b>ÖNERİLEN MUKAVVA YAPISI: {active_eval['key']}</b><br/>Hesaplanan Koli Dış Ölçüleri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b><br/>Hedef BCT: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Sağlanan BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> | Gereken Min. ECT: <b>{active_eval['req_min_ect']:.2f} kN/m</b> | Güvenlik Payı: <b>{active_eval['safety_margin']:.2f}x</b>")
     t_rec = Table([[Paragraph(rec_text, normal_style)]], colWidths=[530])
-    t_rec.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')),
-        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#28a745')),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-    ]))
+    t_rec.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')), ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#28a745')), ('TOPPADDING', (0,0), (-1,-1), 5), ('BOTTOMPADDING', (0,0), (-1,-1), 5)]))
     elements.append(t_rec)
     elements.append(Spacer(1, 8))
 
     mat_headers = ["Mukavva Tipi", "Kalınlık", "Mevcut ECT", "Min. ECT", "BCT", "Hedef BCT", "Durum ve Değerlendirme"]
     mat_rows = [[Paragraph(tr_fix(f"<b>{h}</b>"), bold_style) for h in mat_headers]]
-    
     for item in board_evals:
         if item['key'] == active_eval['key'] and item['is_safe']:
             status_text = f"EN UYGUN ({item['safety_margin']:.2f}x)"
@@ -326,56 +387,29 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
             status_text = f"UYGUN ({item['safety_margin']:.2f}x)"
             st_color = '#383d41'
 
-        status_paragraph = Paragraph(f"<font color='{st_color}'><b>{tr_fix(status_text)}</b></font>", normal_style)
-
         mat_rows.append([
-            Paragraph(tr_fix(item['name']), normal_style),
-            f"{item['caliper']:.1f} mm",
-            f"{item['ect']:.2f} kN/m",
-            f"{item['req_min_ect']:.2f} kN/m",
-            f"{item['actual_bct_kgf']:.1f} kgf",
-            f"{item['target_required_bct_kgf']:.1f} kgf",
-            status_paragraph
+            Paragraph(tr_fix(item['name']), normal_style), f"{item['caliper']:.1f} mm", f"{item['ect']:.2f} kN/m",
+            f"{item['req_min_ect']:.2f} kN/m", f"{item['actual_bct_kgf']:.1f} kgf", f"{item['target_required_bct_kgf']:.1f} kgf",
+            Paragraph(f"<font color='{st_color}'><b>{tr_fix(status_text)}</b></font>", normal_style)
         ])
-
     t_mat = Table(mat_rows, colWidths=[105, 45, 60, 60, 55, 55, 150])
-    t_mat.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-    ]))
+    t_mat.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')), ('TEXTCOLOR', (0,0), (-1,0), colors.white), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 3), ('BOTTOMPADDING', (0,0), (-1,-1), 3)]))
     elements.append(t_mat)
     elements.append(Spacer(1, 10))
 
-    # 3. Palet ve Araç Yükleme
     elements.append(Paragraph(tr_fix("3. Paletleme ve Araç / Konteyner Yükleme Analizi"), h2_style))
     log_data = [
-        [Paragraph(tr_fix("<b>Seçili Palet Tipi:</b>"), normal_style), tr_fix(pallet_info['type']), 
-         Paragraph(tr_fix("<b>Taşıma Aracı:</b>"), normal_style), tr_fix(vehicle_info['name'])],
-        [Paragraph(tr_fix("<b>Kat Başına Koli / Kat:</b>"), normal_style), tr_fix(f"{pallet_info['per_layer']} Koli / {pallet_info['layers']} Kat"), 
-         Paragraph(tr_fix("<b>Paletli Toplam Koli:</b>"), normal_style), tr_fix(f"{vehicle_info['pallet_boxes']:,} Koli ({vehicle_info['pallets']} Palet)")],
-        [Paragraph(tr_fix("<b>1 Paletteki Toplam Koli:</b>"), normal_style), tr_fix(f"{pallet_info['total_boxes']} Koli ({pallet_info['total_units']} Ürün)"), 
-         Paragraph(tr_fix("<b>Dökme Toplam Koli:</b>"), normal_style), tr_fix(f"{vehicle_info['loose_boxes']:,} Koli (+%{vehicle_info['loose_gain']:.1f})")],
-        [Paragraph(tr_fix("<b>1 Palet Brüt Ağırlığı:</b>"), normal_style), f"{pallet_info['pallet_gross']:.1f} kg", 
-         Paragraph(tr_fix("<b>Önerilen Yöntem:</b>"), normal_style), Paragraph(tr_fix(f"<b>{vehicle_info['rec']}</b>"), bold_style)]
+        [Paragraph(tr_fix("<b>Seçili Palet Tipi:</b>"), normal_style), tr_fix(pallet_info['type']), Paragraph(tr_fix("<b>Taşıma Aracı:</b>"), normal_style), tr_fix(vehicle_info['name'])],
+        [Paragraph(tr_fix("<b>Kat Başına Koli / Kat:</b>"), normal_style), tr_fix(f"{pallet_info['per_layer']} Koli / {pallet_info['layers']} Kat"), Paragraph(tr_fix("<b>Paletli Toplam Koli:</b>"), normal_style), tr_fix(f"{vehicle_info['pallet_boxes']:,} Koli ({vehicle_info['pallets']} Palet)")],
+        [Paragraph(tr_fix("<b>1 Paletteki Toplam Koli:</b>"), normal_style), tr_fix(f"{pallet_info['total_boxes']} Koli ({pallet_info['total_units']} Ürün)"), Paragraph(tr_fix("<b>Dökme Toplam Koli:</b>"), normal_style), tr_fix(f"{vehicle_info['loose_boxes']:,} Koli (+%{vehicle_info['loose_gain']:.1f})")],
+        [Paragraph(tr_fix("<b>1 Palet Brüt Ağırlığı:</b>"), normal_style), f"{pallet_info['pallet_gross']:.1f} kg", Paragraph(tr_fix("<b>Önerilen Yöntem:</b>"), normal_style), Paragraph(tr_fix(f"<b>{vehicle_info['rec']}</b>"), bold_style)]
     ]
     t_log = Table(log_data, colWidths=[125, 135, 120, 150])
-    t_log.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-    ]))
+    t_log.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 3), ('BOTTOMPADDING', (0,0), (-1,-1), 3)]))
     elements.append(t_log)
     elements.append(Spacer(1, 10))
 
-    footer_text = tr_fix("Bu rapor McKee Mukavemet Formülü, ASTM D4169 çevresel faktör katsayıları ve uluslararası paletleme standartlarına göre otomatik oluşturulmuştur.")
-    elements.append(Paragraph(footer_text, ParagraphStyle('FooterStyle', parent=normal_style, fontSize=7.5, textColor=colors.gray, alignment=1)))
-
+    elements.append(Paragraph(tr_fix("Bu rapor McKee Mukavemet Formülü, ASTM D4169 çevresel faktör katsayıları ve uluslararası paletleme standartlarına göre otomatik oluşturulmuştur."), ParagraphStyle('FooterStyle', parent=normal_style, fontSize=7.5, textColor=colors.gray, alignment=1)))
     doc.build(elements)
     buf.seek(0)
     return buf.getvalue()
@@ -384,8 +418,8 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
 
 with st.sidebar:
     st.header("🏷️ Koli Tanımlama (İsteğe Bağlı)")
-    box_name_input = st.text_input("Koli / Ürün Adı", placeholder="Örn: 500g Salça Kolisi", help="Rapor başlığında ve dosya adında görünür.")
-    box_code_input = st.text_input("Koli Stok Kodu (SKU)", placeholder="Örn: KL-SL-500-01", help="Üretim/depo takip kodunuz.")
+    box_name_input = st.text_input("Koli / Ürün Adı", placeholder="Örn: 500g Salça Kolisi")
+    box_code_input = st.text_input("Koli Stok Kodu (SKU)", placeholder="Örn: KL-SL-500-01")
 
     st.header("1. Birincil Ürün Bilgileri")
     p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=120.0, step=5.0)
@@ -405,38 +439,15 @@ with st.sidebar:
     humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, selected_env["default_rh"], step=5)
     storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
     
-    st.selectbox(
-        "İstif Deseni",
-        STACK_OPTIONS,
-        index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]),
-        key="sb_pattern",
-        on_change=sync_pattern_sb
-    )
+    st.selectbox("İstif Deseni", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="sb_pattern", on_change=sync_pattern_sb)
     overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
 
     st.header("4. Palet ve Taşıma Kriterleri")
-    st.selectbox(
-        "Palet Standardı",
-        PALLET_OPTIONS,
-        index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]),
-        key="sb_pallet",
-        on_change=sync_pallet_sb
-    )
-    st.number_input(
-        "Maks. Palet Yüksekliği (mm)",
-        min_value=500, value=st.session_state["max_pallet_h_state"], step=50,
-        key="sb_height",
-        on_change=sync_height_sb
-    )
-    st.selectbox(
-        "Taşıma Aracı",
-        VEHICLE_OPTIONS,
-        index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]),
-        key="sb_vehicle",
-        on_change=sync_vehicle_sb
-    )
+    st.selectbox("Palet Standardı", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="sb_pallet", on_change=sync_pallet_sb)
+    st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="sb_height", on_change=sync_height_sb)
+    st.selectbox("Taşıma Aracı", VEHICLE_OPTIONS, index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]), key="sb_vehicle", on_change=sync_vehicle_sb)
 
-# --- AKTİF SEÇİMLER VE HESAPLAMA ---
+# --- MATEMATİKSEL HESAPLAMALAR ---
 
 active_stacking = st.session_state["stacking_pattern_state"]
 active_pallet = st.session_state["pallet_choice_state"]
@@ -469,8 +480,7 @@ for key, bdata in BOARD_DATABASE.items():
     
     usable_h = active_max_h - 145
     layers = int(usable_h // b_out_h)
-    if layers < 1:
-        layers = 1
+    if layers < 1: layers = 1
         
     blank_m2 = (2 * (b_out_l + b_out_w) + 40) * (b_out_w + b_out_h) / 1_000_000
     tare_kg = (blank_m2 * grammage) / 1000
@@ -480,7 +490,6 @@ for key, bdata in BOARD_DATABASE.items():
     target_required_bct_kgf = dead_load_kgf * sf
     
     actual_bct_n, actual_bct_kgf = calculate_mckee_bct(ect, caliper, perimeter)
-    
     target_bct_n = target_required_bct_kgf * 9.80665
     req_min_ect = target_bct_n / (5.87 * math.sqrt(caliper * perimeter)) if (caliper * perimeter) > 0 else 0
     
@@ -488,21 +497,13 @@ for key, bdata in BOARD_DATABASE.items():
     is_safe = safety_margin >= 1.0
     
     eval_item = {
-        "key": key,
-        "name": bdata["name"],
-        "caliper": caliper,
-        "ect": ect,
-        "req_min_ect": req_min_ect,
-        "actual_bct_kgf": actual_bct_kgf,
-        "target_required_bct_kgf": target_required_bct_kgf,
-        "safety_margin": safety_margin,
-        "is_safe": is_safe,
-        "layers": layers,
-        "box_out_dims": (b_out_l, b_out_w, b_out_h),
+        "key": key, "name": bdata["name"], "caliper": caliper, "ect": ect,
+        "req_min_ect": req_min_ect, "actual_bct_kgf": actual_bct_kgf,
+        "target_required_bct_kgf": target_required_bct_kgf, "safety_margin": safety_margin,
+        "is_safe": is_safe, "layers": layers, "box_out_dims": (b_out_l, b_out_w, b_out_h),
         "gross_koli_kg": gross_koli_kg
     }
     board_evaluations.append(eval_item)
-    
     if is_safe and (recommended_board_key is None):
         recommended_board_key = key
 
@@ -544,37 +545,19 @@ else:
 extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
 recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20) else "Paletli Yükleme"
 
-# PDF Paketi Hazırlığı
+# PDF Hazırlığı
 pdf_product_dict = {
     'l': int(p_length), 'w': int(p_width), 'h': int(p_height),
     'weight': int(p_weight), 'units': total_units_box,
     'nx': int(nx), 'ny': int(ny), 'nz': int(nz),
     'net_kg': net_contents_kg,
-    'box_name': box_name_input,
-    'box_code': box_code_input
+    'box_name': box_name_input, 'box_code': box_code_input
 }
-pdf_storage_dict = {
-    'env_name': env_choice, 'rh': humidity_rh,
-    'days': storage_days, 'pattern': active_stacking
-}
-pdf_pallet_dict = {
-    'type': active_pallet, 'per_layer': selected_pattern['count'],
-    'layers': layers_per_pallet, 'total_boxes': total_boxes_pallet,
-    'total_units': total_boxes_pallet * total_units_box,
-    'pallet_gross': total_pallet_gross
-}
-pdf_vehicle_dict = {
-    'name': active_vehicle, 'pallets': total_pallets_in_v,
-    'pallet_boxes': pallet_total_boxes, 'loose_boxes': total_loose_boxes,
-    'loose_gain': extra_capacity_percent, 'rec': recommended_shipping
-}
+pdf_storage_dict = {'env_name': env_choice, 'rh': humidity_rh, 'days': storage_days, 'pattern': active_stacking}
+pdf_pallet_dict = {'type': active_pallet, 'per_layer': selected_pattern['count'], 'layers': layers_per_pallet, 'total_boxes': total_boxes_pallet, 'total_units': total_boxes_pallet * total_units_box, 'pallet_gross': total_pallet_gross}
+pdf_vehicle_dict = {'name': active_vehicle, 'pallets': total_pallets_in_v, 'pallet_boxes': pallet_total_boxes, 'loose_boxes': total_loose_boxes, 'loose_gain': extra_capacity_percent, 'rec': recommended_shipping}
 
-pdf_bytes = generate_pdf_report(
-    pdf_product_dict, pdf_storage_dict, active_eval,
-    board_evaluations, pdf_pallet_dict, pdf_vehicle_dict
-)
-
-# Dosya adını temizleme (Örn: SKU veya Koli adı varsa dosya adına ekle)
+pdf_bytes = generate_pdf_report(pdf_product_dict, pdf_storage_dict, active_eval, board_evaluations, pdf_pallet_dict, pdf_vehicle_dict)
 safe_sku = re.sub(r'[^a-zA-Z0-9_-]', '_', box_code_input.strip()) if box_code_input else ""
 pdf_file_title = f"Koli_Raporu_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Koli_Mukavemet_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
@@ -588,36 +571,26 @@ with col_head:
     st.caption(f"{subtitle_str}Hedef BCT/ECT mukavemetini hesaplayın, en uygun mukavvayı ve lojistik yerleşimini belirleyin.")
 with col_btn:
     st.write("")
-    st.download_button(
-        label="📥 PDF Raporunu İndir",
-        data=pdf_bytes,
-        file_name=pdf_file_title,
-        mime="application/pdf",
-        use_container_width=True
-    )
+    st.download_button(label="📥 PDF Raporunu İndir", data=pdf_bytes, file_name=pdf_file_title, mime="application/pdf", use_container_width=True)
 
 with st.container():
     st.markdown("##### ⚙️ Palet & Taşıma Kriterleri Kontrol Paneli")
     c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
-    with c_ctrl1:
-        st.selectbox("Palet Standardı:", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="main_pallet", on_change=sync_pallet_main)
-    with c_ctrl2:
-        st.number_input("Maks. Palet Yüksekliği (mm):", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="main_height", on_change=sync_height_main)
-    with c_ctrl3:
-        st.selectbox("Taşıma Aracı / Konteyner:", VEHICLE_OPTIONS, index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]), key="main_vehicle", on_change=sync_vehicle_main)
-    with c_ctrl4:
-        st.selectbox("İstif Deseni:", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="main_pattern", on_change=sync_pattern_main)
+    with c_ctrl1: st.selectbox("Palet Standardı:", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="main_pallet", on_change=sync_pallet_main)
+    with c_ctrl2: st.number_input("Maks. Palet Yüksekliği (mm):", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="main_height", on_change=sync_height_main)
+    with c_ctrl3: st.selectbox("Taşıma Aracı / Konteyner:", VEHICLE_OPTIONS, index=VEHICLE_OPTIONS.index(st.session_state["vehicle_choice_state"]), key="main_vehicle", on_change=sync_vehicle_main)
+    with c_ctrl4: st.selectbox("İstif Deseni:", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="main_pattern", on_change=sync_pattern_main)
 
 st.divider()
 
 # TABLAR
 tab1, tab2, tab3 = st.tabs([
-    "🔬 1. Mukavemet Raporu & Mukavva Kalitesi Tavsiyesi",
-    "📦 2. Koli & Palet Dizilim Optimizasyonu",
-    "🚛 3. Araç & Konteyner Yükleme (Paletli vs. Dökme)"
+    "🔬 1. Mukavemet Raporu & Mukavva Tavsiyesi",
+    "📦 2. Koli & Palet Dizilimi (2D / 3D)",
+    "🚛 3. Araç & Konteyner Yükleme (2D / 3D)"
 ])
 
-# === TAB 1: MUKAVEMET VE TAVSİYE ===
+# === TAB 1: MUKAVEMET ===
 with tab1:
     st.subheader(f"🎯 Hedef Koli Mukavemet Analizi ({env_choice})")
     m1, m2, m3, m4 = st.columns(4)
@@ -633,7 +606,6 @@ with tab1:
         st.error(f"⚠️ **DİKKAT: Standart mukavvalar yetersiz kalıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile hedefin altında kalmaktadır. Kat sayısını düşürün veya koli içi seperatör/destek kullanın.")
 
     st.subheader("📋 Mukavva Kalitelerinin Hedef Mukavemete Uygunluk Matrisi")
-    
     table_rows = []
     for item in board_evaluations:
         if item["key"] == recommended_board_key and item["is_safe"]:
@@ -650,30 +622,20 @@ with tab1:
             status_type = "safe"
 
         table_rows.append({
-            "Mukavva Tipi": item["key"],
-            "Kalınlık (mm)": f"{item['caliper']:.1f}",
-            "Mevcut ECT (kN/m)": f"{item['ect']:.2f}",
-            "Gereken Min. ECT (kN/m)": f"{item['req_min_ect']:.2f}",
-            "Sağlanan BCT (kgf)": f"{item['actual_bct_kgf']:.1f}",
-            "Hedef BCT (kgf)": f"{item['target_required_bct_kgf']:.1f}",
-            "Durum ve Değerlendirme": status_text,
-            "_status_type": status_type
+            "Mukavva Tipi": item["key"], "Kalınlık (mm)": f"{item['caliper']:.1f}", "Mevcut ECT (kN/m)": f"{item['ect']:.2f}",
+            "Gereken Min. ECT (kN/m)": f"{item['req_min_ect']:.2f}", "Sağlanan BCT (kgf)": f"{item['actual_bct_kgf']:.1f}",
+            "Hedef BCT (kgf)": f"{item['target_required_bct_kgf']:.1f}", "Durum ve Değerlendirme": status_text, "_status_type": status_type
         })
     
     df_results = pd.DataFrame(table_rows)
-
     def highlight_status(row):
         st_type = row["_status_type"]
         styles = [''] * len(row)
         durum_idx = df_results.columns.get_loc("Durum ve Değerlendirme")
-        if st_type == "optimum":
-            styles[durum_idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
-        elif st_type == "weak":
-            styles[durum_idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-        elif st_type == "overkill":
-            styles[durum_idx] = 'background-color: #cce5ff; color: #004085; font-weight: bold;'
-        else:
-            styles[durum_idx] = 'background-color: #e2e3e5; color: #383d41;'
+        if st_type == "optimum": styles[durum_idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
+        elif st_type == "weak": styles[durum_idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+        elif st_type == "overkill": styles[durum_idx] = 'background-color: #cce5ff; color: #004085; font-weight: bold;'
+        else: styles[durum_idx] = 'background-color: #e2e3e5; color: #383d41;'
         return styles
 
     styled_df = df_results.style.apply(highlight_status, axis=1).hide(subset=["_status_type"], axis="columns")
@@ -689,7 +651,7 @@ with tab1:
         * **Formül:** $S_f = T_{{env}} \\times H_f \\times T_f \\times P_f \\times O_f = {sf:.2f}$
         """)
 
-# === TAB 2: KOLİ VE PALET ===
+# === TAB 2: KOLİ VE PALET (2D / 3D) ===
 with tab2:
     st.subheader(f"📦 Koli & Palet Yerleşim Simülasyonu ({active_pallet})")
     c_p1, c_p2, c_p3, c_p4 = st.columns(4)
@@ -716,10 +678,15 @@ with tab2:
         """)
 
     with col_pat_right:
-        fig_2d = draw_2d_pallet_layout(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, active_pattern)
-        st.plotly_chart(fig_2d, use_container_width=True)
+        view_mode_pallet = st.radio("Görünüm Modu:", ["2D Kat Planı", "3D Palet Modeli"], horizontal=True)
+        if view_mode_pallet == "2D Kat Planı":
+            fig_2d_p = draw_2d_pallet_layout(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, active_pattern)
+            st.plotly_chart(fig_2d_p, use_container_width=True)
+        else:
+            fig_3d_p = draw_3d_pallet_stack(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, box_out_h, layers_per_pallet, active_pattern)
+            st.plotly_chart(fig_3d_p, use_container_width=True)
 
-# === TAB 3: ARAÇ VE KONTEYNER ===
+# === TAB 3: ARAÇ VE KONTEYNER (2D / 3D) ===
 with tab3:
     st.subheader(f"🚚 Taşıma ve Konteyner Yükleme: {active_vehicle}")
     c1, c2, c3 = st.columns(3)
@@ -749,3 +716,28 @@ with tab3:
             "Operasyonel Not": "Maksimum Hacim / Konteyner Tasarrufu"
         }
     ]))
+
+    st.divider()
+    st.markdown("#### 🚛 Taşıt & Konteyner Yükleme Görselleştirmesi")
+    
+    col_v_sel1, col_v_sel2 = st.columns([1, 1])
+    with col_v_sel1:
+        v_mode = st.radio("Yükleme Yöntemi Görünümü:", ["Paletli Yükleme", "Dökme (Loose) Yükleme"], horizontal=True)
+    with col_v_sel2:
+        v_dim_mode = st.radio("Görselleştirme Boyutu:", ["3D Kasa Hacmi", "2D Taban Krokisi"], horizontal=True)
+
+    is_pal_mode = (v_mode == "Paletli Yükleme")
+    
+    if v_dim_mode == "2D Taban Krokisi":
+        fig_2d_v = draw_2d_vehicle_layout(
+            v_info["length"], v_info["width"], is_pal_mode,
+            pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, total_pallets_in_v
+        )
+        st.plotly_chart(fig_2d_v, use_container_width=True)
+    else:
+        fig_3d_v = draw_3d_vehicle_layout(
+            v_info["length"], v_info["width"], v_info["height"], is_pal_mode,
+            pallet_dim[0], pallet_dim[1], pallet_full_h, double_stack,
+            box_out_l, box_out_w, box_out_h, total_pallets_in_v
+        )
+        st.plotly_chart(fig_3d_v, use_container_width=True)
