@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Tam Unicode Türkçe Font Destekli)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Sıfır Ek Bağımlılık & Türkçe Destekli)
 """
 
 import streamlit as st
@@ -22,7 +22,6 @@ from reportlab.lib import colors
 from reportlab.graphics.shapes import Drawing, Rect, String, Line
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import matplotlib.font_manager
 
 st.set_page_config(
     page_title="Koli Mukavemet & Lojistik - Okyanus Danışmanlık",
@@ -31,27 +30,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GARANTİLİ UNICODE / TÜRKÇE FONT YÜKLEYİCİ ---
+# --- MATPLOTLIB GEREKTİRMEYEN GÜVENLİ UNICODE TÜRKÇE FONT YÜKLEYİCİ ---
 FONT_NAME = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
 
-try:
-    all_system_fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
-    dejavu_reg = next((f for f in all_system_fonts if 'DejaVuSans.ttf' in f or 'dejavu/DejaVuSans.ttf' in f), None)
-    dejavu_bold = next((f for f in all_system_fonts if 'DejaVuSans-Bold.ttf' in f or 'dejavu/DejaVuSans-Bold.ttf' in f), None)
-    
-    if not dejavu_reg:
-        dejavu_reg = next((f for f in all_system_fonts if 'Arial.ttf' in f or 'arial.ttf' in f or 'LiberationSans-Regular.ttf' in f), None)
-    if not dejavu_bold:
-        dejavu_bold = next((f for f in all_system_fonts if 'Arial Bold.ttf' in f or 'arialbd.ttf' in f or 'LiberationSans-Bold.ttf' in f), None)
+candidate_fonts = [
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    ("/usr/share/fonts/truetype/freefont/FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
+    ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf"),
+    ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf")
+]
 
-    if dejavu_reg and dejavu_bold:
-        pdfmetrics.registerFont(TTFont('AppTurkishFont', dejavu_reg))
-        pdfmetrics.registerFont(TTFont('AppTurkishFont-Bold', dejavu_bold))
-        FONT_NAME = 'AppTurkishFont'
-        FONT_BOLD = 'AppTurkishFont-Bold'
-except Exception:
-    pass
+for reg_path, bold_path in candidate_fonts:
+    if os.path.exists(reg_path) and os.path.exists(bold_path):
+        try:
+            pdfmetrics.registerFont(TTFont('AppTurkishFont', reg_path))
+            pdfmetrics.registerFont(TTFont('AppTurkishFont-Bold', bold_path))
+            FONT_NAME = 'AppTurkishFont'
+            FONT_BOLD = 'AppTurkishFont-Bold'
+            break
+        except Exception:
+            pass
 
 # Mukavva Veritabanı
 BOARD_DATABASE = {
@@ -224,7 +224,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
 
 def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
-    y = [y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy, y0]
+    y = [y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy]
     z = [z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz]
     i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
     j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
@@ -428,7 +428,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (TAM TÜRKÇE) ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info):
     buf = io.BytesIO()
