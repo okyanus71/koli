@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Şartname Künyesi Sadeleştirilmiş)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Tam Türkçe Karakter & Kalite Raporu Uyumlu)
 """
 
 import streamlit as st
@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import math
 import io
+import os
 import re
 from datetime import datetime
 
@@ -18,7 +19,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.graphics.shapes import Drawing, Rect, String, Line
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 st.set_page_config(
     page_title="Koli Mukavemet & Lojistik - Okyanus Danışmanlık",
@@ -27,10 +30,40 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- UNICODE / TÜRKÇE FONT YÖNETİMİ ---
+# Sistemde bulunan Türkçe destekli standart TrueType fontları kaydet
+FONT_NAME = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
+
+# Linux / Streamlit Cloud / Mac / Windows standart font yolları kontrolü
+font_paths = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/Library/Fonts/Arial.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf"
+]
+font_bold_paths = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf"
+]
+
+for fp, fbp in zip(font_paths, font_bold_paths):
+    if os.path.exists(fp) and os.path.exists(fbp):
+        try:
+            pdfmetrics.registerFont(TTFont('TR_Font', fp))
+            pdfmetrics.registerFont(TTFont('TR_Font_Bold', fbp))
+            FONT_NAME = 'TR_Font'
+            FONT_BOLD = 'TR_Font_Bold'
+            break
+        except Exception:
+            pass
+
 # Mukavva Veritabanı
 BOARD_DATABASE = {
     "Tek Dalga - B Dalga (İnce - 3.0 mm)": {
-        "name": "B Dalga (Ince)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0,
+        "name": "B Dalga (İnce)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0,
         "paper_combination": "140 K / 110 F / 140 T"
     },
     "Tek Dalga - C Dalga (Orta - 4.0 mm)": {
@@ -42,7 +75,7 @@ BOARD_DATABASE = {
         "paper_combination": "140 K / 110 F / 110 T / 110 F / 140 T"
     },
     "Çift Dalga - BC Dalga (Standart Dopel - 6.5 mm)": {
-        "name": "BC Dalga (Agir Hizmet)", "caliper": 6.5, "ect": 8.0, "grammage": 620, "flute": "BC", "cost_index": 1.55,
+        "name": "BC Dalga (Ağır Hizmet)", "caliper": 6.5, "ect": 8.0, "grammage": 620, "flute": "BC", "cost_index": 1.55,
         "paper_combination": "175 K / 125 F / 125 T / 125 F / 175 K"
     },
     "Ağır Hizmet - AAC Dalga (Triplex - 10.0 mm)": {
@@ -53,32 +86,32 @@ BOARD_DATABASE = {
 
 STORAGE_ENVIRONMENTS = {
     "Oda Sıcaklığı (İklimlendirme Yok / Kontrolsüz)": {
-        "temp_desc": "Mevsimsel Degisken (15°C - 35°C)",
+        "temp_desc": "Mevsimsel Değişken (15°C - 35°C)",
         "base_temp_factor": 1.25,
         "default_rh": 70,
         "is_cold": False,
-        "desc": "Gece-gunduz yogusmasi ve kontrolsuz bagil nem riski."
+        "desc": "Gece-gündüz yoğuşması ve kontrolsüz bağıl nem riski."
     },
     "+20°C Kontrollü Ortam (Klimalı Kuru Gıda Deposu)": {
         "temp_desc": "+18°C / +22°C Sabit",
         "base_temp_factor": 1.00,
         "default_rh": 55,
         "is_cold": False,
-        "desc": "Kuru gida referans kosulu. Lif mukavemet kaybi dusuktur."
+        "desc": "Kuru gıda referans koşulu. Lif mukavemet kaybı düşüktür."
     },
     "+4°C Soğuk Hava Deposu (Taze / Süt / Şarküteri)": {
-        "temp_desc": "+2°C / +6°C Soguk Zincir",
+        "temp_desc": "+2°C / +6°C Soğuk Zincir",
         "base_temp_factor": 1.55,
         "default_rh": 85,
         "is_cold": True,
-        "desc": "Evaporator nemi nedeniyle liflerde %35-50 yumusama."
+        "desc": "Evaporatör nemi nedeniyle liflerde %35-50 yumuşama."
     },
     "-18°C Donuk Muhafaza (Deep Freeze)": {
         "temp_desc": "-18°C / -22°C Donuk Depo",
         "base_temp_factor": 1.35,
         "default_rh": 90,
         "is_cold": True,
-        "desc": "Lif kirilganligi ve cikista terleme riski."
+        "desc": "Lif kırılganlığı ve çıkışta yoğuşma (terleme) riski."
     }
 }
 
@@ -402,28 +435,22 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-def tr_fix(text):
-    if not isinstance(text, str): text = str(text)
-    mapping = {'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S', 'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'}
-    for k, v in mapping.items(): text = text.replace(k, v)
-    return text
-
 # --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=25, leftMargin=25, topMargin=20, bottomMargin=20)
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], fontSize=13, leading=16, textColor=colors.HexColor('#1f77b4'), alignment=1)
-    author_style = ParagraphStyle('AuthorHeader', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor('#003366'), alignment=1, fontName='Helvetica-Bold')
-    h2_style = ParagraphStyle('SectionHeader', parent=styles['Heading2'], fontSize=9.5, leading=12, textColor=colors.HexColor('#003366'), spaceBefore=5, spaceAfter=2)
-    normal_style = ParagraphStyle('ReportBody', parent=styles['Normal'], fontSize=7.5, leading=9.5)
-    bold_style = ParagraphStyle('ReportBold', parent=styles['Normal'], fontSize=7.5, leading=9.5, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], fontName=FONT_BOLD, fontSize=13, leading=16, textColor=colors.HexColor('#1f77b4'), alignment=1)
+    author_style = ParagraphStyle('AuthorHeader', parent=styles['Normal'], fontName=FONT_BOLD, fontSize=8.5, leading=11, textColor=colors.HexColor('#003366'), alignment=1)
+    h2_style = ParagraphStyle('SectionHeader', parent=styles['Heading2'], fontName=FONT_BOLD, fontSize=9.5, leading=12, textColor=colors.HexColor('#003366'), spaceBefore=5, spaceAfter=2)
+    normal_style = ParagraphStyle('ReportBody', parent=styles['Normal'], fontName=FONT_NAME, fontSize=7.5, leading=9.5)
+    bold_style = ParagraphStyle('ReportBold', parent=styles['Normal'], fontName=FONT_BOLD, fontSize=7.5, leading=9.5)
 
     elements = []
-    elements.append(Paragraph(tr_fix("GIDA AMBALAJI KOLİ MUKAVEMET VE LOJİSTİK RAPORU"), title_style))
-    elements.append(Paragraph(tr_fix("Hazırlayan: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)"), author_style))
-    elements.append(Paragraph(tr_fix(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
+    elements.append(Paragraph("GIDA AMBALAJI KOLİ MUKAVEMET VE LOJİSTİK RAPORU", title_style))
+    elements.append(Paragraph("Hazırlayan: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)", author_style))
+    elements.append(Paragraph(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}", ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 4))
 
     box_name_disp = prod_info.get('box_name', '').strip()
@@ -431,19 +458,19 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     if box_name_disp or box_code_disp:
         name_str = box_name_disp if box_name_disp else "Belirtilmedi"
         code_str = box_code_disp if box_code_disp else "Belirtilmedi"
-        id_table_data = [[Paragraph(tr_fix(f"<b>Koli / Ürün Adı:</b> {name_str}"), normal_style), Paragraph(tr_fix(f"<b>Koli Stok Kodu (SKU):</b> {code_str}"), normal_style)]]
+        id_table_data = [[Paragraph(f"<b>Koli / Ürün Adı:</b> {name_str}", normal_style), Paragraph(f"<b>Koli Stok Kodu (SKU):</b> {code_str}", normal_style)]]
         t_id = Table(id_table_data, colWidths=[270, 270])
         t_id.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')), ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')), ('TOPPADDING', (0,0), (-1,-1), 2.5), ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)]))
         elements.append(t_id)
         elements.append(Spacer(1, 3))
 
     # 1. Girdiler
-    elements.append(Paragraph(tr_fix("1. Temel Girdi Parametreleri ve Depolama Koşulları"), h2_style))
+    elements.append(Paragraph("1. Temel Girdi Parametreleri ve Depolama Koşulları", h2_style))
     input_data = [
-        [Paragraph(tr_fix("<b>Birincil Ürün Ölçüleri:</b>"), normal_style), f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", Paragraph(tr_fix("<b>Depolama Rejimi:</b>"), normal_style), tr_fix(storage_info['env_name'])],
-        [Paragraph(tr_fix("<b>Ürün Birim Ağırlığı:</b>"), normal_style), f"{prod_info['weight']} g", Paragraph(tr_fix("<b>Depo Bağıl Nemi:</b>"), normal_style), f"%{storage_info['rh']} RH"],
-        [Paragraph(tr_fix("<b>Koli İçi Adet:</b>"), normal_style), tr_fix(f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})"), Paragraph(tr_fix("<b>Depolama Süresi:</b>"), normal_style), tr_fix(f"{storage_info['days']} Gün")],
-        [Paragraph(tr_fix("<b>Koli Net / Brüt Ağırlık:</b>"), normal_style), f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", Paragraph(tr_fix("<b>İstif Deseni:</b>"), normal_style), tr_fix(storage_info['pattern'])]
+        [Paragraph("<b>Birincil Ürün Ölçüleri:</b>", normal_style), f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", Paragraph("<b>Depolama Rejimi:</b>", normal_style), storage_info['env_name']],
+        [Paragraph("<b>Ürün Birim Ağırlığı:</b>", normal_style), f"{prod_info['weight']} g", Paragraph("<b>Depo Bağıl Nemi:</b>", normal_style), f"%{storage_info['rh']} RH"],
+        [Paragraph("<b>Koli İçi Adet:</b>", normal_style), f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})", Paragraph("<b>Depolama Süresi:</b>", normal_style), f"{storage_info['days']} Gün"],
+        [Paragraph("<b>Koli Net / Brüt Ağırlık:</b>", normal_style), f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", Paragraph("<b>İstif Deseni:</b>", normal_style), storage_info['pattern']]
     ]
     t_input = Table(input_data, colWidths=[130, 140, 125, 145])
     t_input.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 2), ('BOTTOMPADDING', (0,0), (-1,-1), 2)]))
@@ -451,30 +478,30 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Spacer(1, 4))
 
     # 2. Mukavemet
-    elements.append(Paragraph(tr_fix("2. Hedef Mukavemet & Mukavva Kalitesi Değerlendirmesi"), h2_style))
+    elements.append(Paragraph("2. Hedef Mukavemet & Mukavva Kalitesi Değerlendirmesi", h2_style))
     b_out = active_eval['box_out_dims']
-    rec_text = tr_fix(f"<b>ÖNERİLEN MUKAVVA: {active_eval['key']}</b> | Koli Dış Ölçüleri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b> | Hedef BCT: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Sağlanan BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> | Min. ECT: <b>{active_eval['req_min_ect']:.2f} kN/m</b> | Güvenlik Payı: <b>{active_eval['safety_margin']:.2f}x</b>")
+    rec_text = f"<b>ÖNERİLEN MUKAVVA: {active_eval['key']}</b> | Koli Dış Ölçüleri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b> | Hedef BCT: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Sağlanan BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> | Min. ECT: <b>{active_eval['req_min_ect']:.2f} kN/m</b> | Güvenlik Payı: <b>{active_eval['safety_margin']:.2f}x</b>"
     t_rec = Table([[Paragraph(rec_text, normal_style)]], colWidths=[540])
     t_rec.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')), ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#28a745')), ('TOPPADDING', (0,0), (-1,-1), 3), ('BOTTOMPADDING', (0,0), (-1,-1), 3)]))
     elements.append(t_rec)
     elements.append(Spacer(1, 4))
 
     mat_headers = ["Mukavva Tipi", "Kalınlık", "Mevcut ECT", "Min. ECT", "BCT", "Hedef BCT", "Durum ve Değerlendirme"]
-    mat_rows = [[Paragraph(tr_fix(f"<b>{h}</b>"), bold_style) for h in mat_headers]]
+    mat_rows = [[Paragraph(f"<b>{h}</b>", bold_style) for h in mat_headers]]
     for item in board_evals:
         if item['key'] == active_eval['key'] and item['is_safe']:
             status_text = f"EN UYGUN ({item['safety_margin']:.2f}x)"; st_color = '#155724'
         elif not item['is_safe']:
-            status_text = f"YETERSIZ / RISKLI ({item['safety_margin']:.2f}x)"; st_color = '#721c24'
+            status_text = f"YETERSİZ / RİSKLİ ({item['safety_margin']:.2f}x)"; st_color = '#721c24'
         elif item['safety_margin'] >= 2.0:
-            status_text = f"ASIRI GUCLU ({item['safety_margin']:.2f}x)"; st_color = '#004085'
+            status_text = f"AŞIRI GÜÇLÜ ({item['safety_margin']:.2f}x)"; st_color = '#004085'
         else:
             status_text = f"UYGUN ({item['safety_margin']:.2f}x)"; st_color = '#383d41'
 
         mat_rows.append([
-            Paragraph(tr_fix(item['name']), normal_style), f"{item['caliper']:.1f} mm", f"{item['ect']:.2f} kN/m",
+            Paragraph(item['name'], normal_style), f"{item['caliper']:.1f} mm", f"{item['ect']:.2f} kN/m",
             f"{item['req_min_ect']:.2f} kN/m", f"{item['actual_bct_kgf']:.1f} kgf", f"{item['target_required_bct_kgf']:.1f} kgf",
-            Paragraph(f"<font color='{st_color}'><b>{tr_fix(status_text)}</b></font>", normal_style)
+            Paragraph(f"<font color='{st_color}'><b>{status_text}</b></font>", normal_style)
         ])
     t_mat = Table(mat_rows, colWidths=[110, 45, 60, 60, 55, 55, 155])
     t_mat.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')), ('TEXTCOLOR', (0,0), (-1,0), colors.white), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 2), ('BOTTOMPADDING', (0,0), (-1,-1), 2)]))
@@ -482,11 +509,11 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Spacer(1, 4))
 
     # 3. Paletleme ve İstif Doluluk Analizi
-    elements.append(Paragraph(tr_fix("3. Paletleme ve İstif Doluluk Analizi"), h2_style))
+    elements.append(Paragraph("3. Paletleme ve İstif Doluluk Analizi", h2_style))
     d_pal_2d = pdf_draw_pallet_2d(pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['coords'], width=240, height=95)
     
     pal_text_cell = f"""
-    <b>Seçili Palet Standardı:</b> {tr_fix(pallet_info['type'])}<br/>
+    <b>Seçili Palet Standardı:</b> {pallet_info['type']}<br/>
     <b>Kat Başına Koli / Kat Sayısı:</b> {pallet_info['per_layer']} Koli / {pallet_info['layers']} Kat<br/>
     <b>1 Paletteki Toplam Koli:</b> {pallet_info['total_boxes']} Koli ({pallet_info['total_units']:,} Ürün)<br/>
     <b>1 Palet Toplam Ağırlığı:</b> {pallet_info['pallet_gross']:.1f} kg<br/>
@@ -494,7 +521,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     <b>Koli İçi Hacim Doluluğu:</b> %{prod_info['box_fill_rate']:.1f}
     """
     t_pal_sec = Table([
-        [Paragraph(tr_fix(pal_text_cell), normal_style), d_pal_2d]
+        [Paragraph(pal_text_cell, normal_style), d_pal_2d]
     ], colWidths=[290, 250])
     t_pal_sec.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
@@ -507,21 +534,21 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Spacer(1, 4))
 
     # 4. Taşıt ve Konteyner Lojistik Analizi
-    elements.append(Paragraph(tr_fix("4. Taşıt ve Konteyner Lojistik Analizi"), h2_style))
+    elements.append(Paragraph("4. Taşıt ve Konteyner Lojistik Analizi", h2_style))
     v_data = vehicle_info['data']
     d_veh_2d = pdf_draw_vehicle_2d(v_data['length'], v_data['width'], pallet_info['dim'][0], pallet_info['dim'][1], True, vehicle_info['pallets'], width=240, height=95)
     
     veh_text_cell = f"""
-    <b>Taşıma Aracı / Konteyner:</b> {tr_fix(vehicle_info['name'])}<br/>
+    <b>Taşıma Aracı / Konteyner:</b> {vehicle_info['name']}<br/>
     <b>Paletli Yükleme Kapasitesi:</b> {vehicle_info['pallet_boxes']:,} Koli ({vehicle_info['pallets']} Palet)<br/>
     <b>Paletli Ağırlık / Tonaj Doluluğu:</b> %{vehicle_info['pallet_weight_util']:.1f} ({vehicle_info['pallet_total_wt']:,.1f} kg)<br/>
     <b>Paletli Hacimsel Doluluk (Kübaj):</b> %{vehicle_info['pallet_vol_util']:.1f} ({vehicle_info['pallet_total_vol']:.1f} m³)<br/>
     <b>Dökme Yükleme Kapasitesi:</b> {vehicle_info['loose_boxes']:,} Koli (+%{vehicle_info['loose_gain']:.1f})<br/>
     <b>Dökme Hacimsel Doluluk:</b> %{vehicle_info['loose_vol_util']:.1f} ({vehicle_info['loose_total_vol']:.1f} m³)<br/>
-    <b>Önerilen Sevkiyat Modu:</b> <b>{tr_fix(vehicle_info['rec'])}</b>
+    <b>Önerilen Sevkiyat Modu:</b> <b>{vehicle_info['rec']}</b>
     """
     t_veh_sec = Table([
-        [Paragraph(tr_fix(veh_text_cell), normal_style), d_veh_2d]
+        [Paragraph(veh_text_cell, normal_style), d_veh_2d]
     ], colWidths=[290, 250])
     t_veh_sec.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
@@ -533,13 +560,13 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_veh_sec)
     elements.append(Spacer(1, 4))
 
-    footer_text = tr_fix("Raporlama & Mühendislik: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.) | McKee Mukavemet & ASTM D4169 Standartları")
+    footer_text = "Raporlama & Mühendislik: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.) | McKee Mukavemet & ASTM D4169 Standartları"
     elements.append(Paragraph(footer_text, ParagraphStyle('FooterStyle', parent=normal_style, fontSize=6.5, textColor=colors.gray, alignment=1)))
     doc.build(elements)
     buf.seek(0)
     return buf.getvalue()
 
-# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ ---
+# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ (TAM TÜRKÇE VE KALİTE RAPORU UYUMLU) ---
 
 def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     """Tedarikçiye verilmek üzere resmi Koli Satınalma Teknik Şartnamesi PDF'i üretir"""
@@ -547,10 +574,10 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=25, bottomMargin=25)
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('SpecTitle', parent=styles['Heading1'], fontSize=13, leading=16, textColor=colors.HexColor('#003366'), alignment=1)
-    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontSize=9.5, leading=12, textColor=colors.HexColor('#1f77b4'), spaceBefore=6, spaceAfter=2)
-    normal = ParagraphStyle('SpecNorm', parent=styles['Normal'], fontSize=7.5, leading=10)
-    bold = ParagraphStyle('SpecBld', parent=styles['Normal'], fontSize=7.5, leading=10, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('SpecTitle', parent=styles['Heading1'], fontName=FONT_BOLD, fontSize=13, leading=16, textColor=colors.HexColor('#003366'), alignment=1)
+    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontName=FONT_BOLD, fontSize=9.5, leading=12, textColor=colors.HexColor('#1f77b4'), spaceBefore=6, spaceAfter=2)
+    normal = ParagraphStyle('SpecNorm', parent=styles['Normal'], fontName=FONT_NAME, fontSize=7.5, leading=10)
+    bold = ParagraphStyle('SpecBld', parent=styles['Normal'], fontName=FONT_BOLD, fontSize=7.5, leading=10)
 
     b_out = active_eval['box_out_dims']
     box_in_l = prod_info['box_in_l']
@@ -559,18 +586,18 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     b_data = BOARD_DATABASE[active_eval['key']]
 
     elements = []
-    elements.append(Paragraph(tr_fix("OLUKLU MUKAVVA KOLI TEKNIK SATINALMA SARTNAMESI"), title_style))
-    elements.append(Paragraph(tr_fix(f"Dokuman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}"), ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
+    elements.append(Paragraph("OLUKLU MUKAVVA KOLİ TEKNİK SATINALMA ŞARTNAMESİ", title_style))
+    elements.append(Paragraph(f"Doküman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}", ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 6))
 
     # 1. Genel Bilgiler
-    elements.append(Paragraph(tr_fix("1. Urun ve Ambalaj Kimlik Bilgileri"), sec_title))
-    name_str = prod_info.get('box_name', '').strip() or "Standart Gida Kolisi"
-    code_str = prod_info.get('box_code', '').strip() or "BELIRTILMEDI"
+    elements.append(Paragraph("1. Ürün ve Ambalaj Kimlik Bilgileri", sec_title))
+    name_str = prod_info.get('box_name', '').strip() or "Standart Gıda Kolisi"
+    code_str = prod_info.get('box_code', '').strip() or "BELİRTİLMEDİ"
     t_id = Table([
-        [Paragraph(tr_fix("<b>Koli / Urun Tanimi:</b>"), normal), Paragraph(tr_fix(name_str), normal), Paragraph(tr_fix("<b>Koli Kodu / SKU:</b>"), normal), Paragraph(tr_fix(code_str), normal)],
-        [Paragraph(tr_fix("<b>Koli Tipi (Standart):</b>"), normal), Paragraph(tr_fix("FEFCO 0201 (Standart Yarik Ackili)"), normal), Paragraph(tr_fix("<b>Baski / Renk:</b>"), normal), Paragraph(tr_fix("Flekso Baski (Onayli Klise)"), normal)],
-        [Paragraph(tr_fix("<b>Birlestirme Yontemi:</b>"), normal), Paragraph(tr_fix("Tutkalli / Sicak Yapistirma (Hot-melt)"), normal), Paragraph(tr_fix("<b>Gida Temas Uygunlugu:</b>"), normal), Paragraph(tr_fix("Uygun (Ikincil Dis Ambalaj)"), normal)]
+        [Paragraph("<b>Koli / Ürün Tanımı:</b>", normal), Paragraph(name_str, normal), Paragraph("<b>Koli Kodu / SKU:</b>", normal), Paragraph(code_str, normal)],
+        [Paragraph("<b>Koli Tipi (Standart):</b>", normal), Paragraph("FEFCO 0201 (Standart Yarık Açkılı)", normal), Paragraph("<b>Baskı / Renk:</b>", normal), Paragraph("Flekso Baskı (Onaylı Klişe)", normal)],
+        [Paragraph("<b>Birleştirme Yöntemi:</b>", normal), Paragraph("Tutkallı / Sıcak Yapıştırma (Hot-melt)", normal), Paragraph("<b>Gıda Temas Uygunluğu:</b>", normal), Paragraph("Uygun (İkincil Dış Ambalaj)", normal)]
     ], colWidths=[120, 145, 120, 150])
     t_id.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
@@ -582,13 +609,13 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     elements.append(t_id)
 
     # 2. Boyutsal ve Geometrik Özellikler
-    elements.append(Paragraph(tr_fix("2. Boyutsal Ozellikler ve Toleranslar"), sec_title))
+    elements.append(Paragraph("2. Boyutsal Özellikler ve Toleranslar", sec_title))
     t_dim = Table([
-        [Paragraph(tr_fix("<b>Olcu Parametresi</b>"), bold), Paragraph(tr_fix("<b>Hedef Deger</b>"), bold), Paragraph(tr_fix("<b>Tolerans</b>"), bold), Paragraph(tr_fix("<b>Aciklama</b>"), bold)],
-        [Paragraph(tr_fix("Ic Olculer (L x W x H)"), normal), f"{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm", "± 2.0 mm", Paragraph(tr_fix("Net urun yerlesim hacmi"), normal)],
-        [Paragraph(tr_fix("Dis Olculer (L x W x H)"), normal), f"{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm", "± 3.0 mm", Paragraph(tr_fix("Lojistik / paletleme dis siniri"), normal)],
-        [Paragraph(tr_fix("Mukavva Kalinligi (Caliper)"), normal), f"{active_eval['caliper']:.1f} mm", "± 0.2 mm", Paragraph(tr_fix(f"{b_data['flute']} Dalga Profili"), normal)],
-        [Paragraph(tr_fix("Koli Bos Agirligi (Dara)"), normal), f"~{active_eval['gross_koli_kg'] - prod_info['net_kg']:.3f} kg", "± %5", Paragraph(tr_fix("Gramaja bagli teorik dara"), normal)]
+        [Paragraph("<b>Ölçü Parametresi</b>", bold), Paragraph("<b>Hedef Değer</b>", bold), Paragraph("<b>Tolerans</b>", bold), Paragraph("<b>Açıklama</b>", bold)],
+        [Paragraph("İç Ölçüler (L x W x H)", normal), f"{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm", "± 2.0 mm", Paragraph("Net ürün yerleşim hacmi", normal)],
+        [Paragraph("Dış Ölçüler (L x W x H)", normal), f"{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm", "± 3.0 mm", Paragraph("Lojistik / paletleme dış sınırı", normal)],
+        [Paragraph("Mukavva Kalınlığı (Caliper)", normal), f"{active_eval['caliper']:.1f} mm", "± 0.2 mm", Paragraph(f"{b_data['flute']} Dalga Profili", normal)],
+        [Paragraph("Koli Boş Ağırlığı (Dara)", normal), f"~{active_eval['gross_koli_kg'] - prod_info['net_kg']:.3f} kg", "± %5", Paragraph("Gramaja bağlı teorik dara", normal)]
     ], colWidths=[140, 125, 80, 190])
     t_dim.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
@@ -601,14 +628,14 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     elements.append(t_dim)
 
     # 3. Mukavemet & Hammadde Kalite Kriterleri
-    elements.append(Paragraph(tr_fix("3. Mukavemet, ECT / BCT ve Kagit Kalitesi Kriterleri"), sec_title))
+    elements.append(Paragraph("3. Mukavemet, ECT / BCT ve Kağıt Kalitesi Kriterleri", sec_title))
     t_str = Table([
-        [Paragraph(tr_fix("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(tr_fix("<b>Zorunlu Minimum Deger</b>"), bold), Paragraph(tr_fix("<b>Test Standardi</b>"), bold)],
-        [Paragraph(tr_fix("Kenar Ezilme Direnci (ECT)"), normal), Paragraph(tr_fix(f"Minimum {active_eval['ect']:.2f} kN/m (Gereken: {active_eval['req_min_ect']:.2f} kN/m)"), normal), "ISO 3037 / TAPPI T 811"],
-        [Paragraph(tr_fix("Koli Kutu Ezilme Dayanimi (BCT)"), normal), Paragraph(tr_fix(f"Minimum {active_eval['actual_bct_kgf']:.1f} kgf (Hedef Statik: {active_eval['target_required_bct_kgf']:.1f} kgf)"), normal), "ISO 12048 / ASTM D642"],
-        [Paragraph(tr_fix("Dalga Cinsi ve Mukavva Tipi"), normal), Paragraph(tr_fix(f"{active_eval['key']}"), normal), Paragraph(tr_fix("FEFCO Standardi"), normal)],
-        [Paragraph(tr_fix("Onerilen Kagit Recetesi (Gramaj)"), normal), Paragraph(tr_fix(f"{b_data.get('paper_combination', 'Tedarikci Standart')}"), normal), "ISO 536"],
-        [Paragraph(tr_fix("Hedef Cevre Kosulu Dayanimi"), normal), Paragraph(tr_fix(f"{storage_info['env_name']} (%{storage_info['rh']} RH)"), normal), Paragraph(tr_fix("ASTM D4169 Sartlandirma"), normal)]
+        [Paragraph("<b>Mekanik Test Parametresi</b>", bold), Paragraph("<b>Zorunlu Minimum Değer</b>", bold), Paragraph("<b>Test Standardı</b>", bold)],
+        [Paragraph("Kenar Ezilme Direnci (ECT)", normal), Paragraph(f"Minimum {active_eval['ect']:.2f} kN/m (Gereken: {active_eval['req_min_ect']:.2f} kN/m)", normal), "ISO 3037 / TAPPI T 811"],
+        [Paragraph("Koli Kutu Ezilme Dayanımı (BCT)", normal), Paragraph(f"Minimum {active_eval['actual_bct_kgf']:.1f} kgf (Hedef Statik: {active_eval['target_required_bct_kgf']:.1f} kgf)", normal), "ISO 12048 / ASTM D642"],
+        [Paragraph("Dalga Cinsi ve Mukavva Tipi", normal), Paragraph(f"{active_eval['key']}", normal), Paragraph("FEFCO Standardı", normal)],
+        [Paragraph("Önerilen Kağıt Reçetesi (Gramaj)", normal), Paragraph(f"{b_data.get('paper_combination', 'Tedarikçi Standart')}", normal), "ISO 536"],
+        [Paragraph("Hedef Çevre Koşulu Dayanımı", normal), Paragraph(f"{storage_info['env_name']} (%{storage_info['rh']} RH)", normal), Paragraph("ASTM D4169 Şartlandırma", normal)]
     ], colWidths=[160, 225, 150])
     t_str.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#003366')),
@@ -620,22 +647,22 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     ]))
     elements.append(t_str)
 
-    # 4. Kalite Kabul ve Sevk Şartları
-    elements.append(Paragraph(tr_fix("4. Kalite Kontrol, Kabul ve Sevk Kriterleri"), sec_title))
+    # 4. Kalite Kabul ve Sevk Şartları (Kalite Test Raporu olarak güncellendi)
+    elements.append(Paragraph("4. Kalite Kontrol, Kabul ve Sevk Kriterleri", sec_title))
     criteria_text = """
-    • <b>Nem Orani:</b> Teslimat aninda mukavva rutubeti <b>%7 - %9</b> araliginda olmalidir. %10 uzeri partiler mukavemet zaafiyeti nedeniyle reddedilir.<br/>
-    • <b>Pilyaj ve Katlama Cizgileri:</b> Koli katlama izleri pilyaj kiriminda catlama ve yirtilma yapmamali, otomatik koli kurma hatlarina uygun olmalidir.<br/>
-    • <b>Paletleme ve Koruma:</b> Sevk edilen bos koliler palet uzerinde duzgun istiflenmis, alttan ve ustten koruyucu mukavva kapak konularak neme karsi streclenmis olmalidir.<br/>
-    • <b>Parti Uygunlugu:</b> Tedarikci, her sevk partisiyle birlikte ilgili lota ait <b>ECT Test Raporunu</b> ibraz etmekle yukumludur.
+    • <b>Nem Oranı:</b> Teslimat anında mukavva rutubeti <b>%7 - %9</b> aralığında olmalıdır. %10 üzeri partiler mukavemet zaafiyeti nedeniyle reddedilir.<br/>
+    • <b>Pilyaj ve Katlama Çizgileri:</b> Koli katlama izleri pilyaj kırımında çatlama ve yırtılma yapmamalı, otomatik koli kurma hatlarına uygun olmalıdır.<br/>
+    • <b>Paletleme ve Koruma:</b> Sevk edilen boş koliler palet üzerinde düzgün istiflenmiş, alttan ve üstten koruyucu mukavva kapak konularak neme karşı streçlenmiş olmalıdır.<br/>
+    • <b>Parti Uygunluğu:</b> Tedarikçi, her sevk partisiyle birlikte ilgili lota ait <b>Kalite Test Raporunu</b> ibraz etmekle yükümlüdür.
     """
-    elements.append(Paragraph(tr_fix(criteria_text), normal))
+    elements.append(Paragraph(criteria_text, normal))
     elements.append(Spacer(1, 8))
 
     # Onay Alanı
     t_sign = Table([
-        [Paragraph(tr_fix("<b>ALICI FIRMA ONAYI</b><br/>Kalite Guvence / Satinalma Birimi"), normal),
-         Paragraph(tr_fix("<b>TEDARIKCI FIRMA TAAHHUTNAMESI</b><br/>Yukaridaki teknik sartlari eksiksiz kabul ederiz."), normal)],
-        [Paragraph("<br/><br/>Imza / Kase:<br/>Tarih:", normal), Paragraph("<br/><br/>Imza / Kase:<br/>Tarih:", normal)]
+        [Paragraph("<b>ALICI FİRMA ONAYI</b><br/>Kalite Güvence / Satınalma Birimi", normal),
+         Paragraph("<b>TEDARİKÇİ FİRMA TAAHHÜTNAMESİ</b><br/>Yukarıdaki teknik şartları eksiksiz kabul ederiz.", normal)],
+        [Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal), Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal)]
     ], colWidths=[265, 265])
     t_sign.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#888888')),
