@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Ayrılmış Taşıt Analizli Sonuç Raporu)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Koli Satınalma Teknik Şartnameli)
 """
 
 import streamlit as st
@@ -30,19 +30,24 @@ st.set_page_config(
 # Mukavva Veritabanı
 BOARD_DATABASE = {
     "Tek Dalga - B Dalga (İnce - 3.0 mm)": {
-        "name": "B Dalga (İnce)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0
+        "name": "B Dalga (İnce)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0,
+        "paper_combination": "140 K / 110 F / 140 T"
     },
     "Tek Dalga - C Dalga (Orta - 4.0 mm)": {
-        "name": "C Dalga (Standart)", "caliper": 4.0, "ect": 5.2, "grammage": 480, "flute": "C", "cost_index": 1.15
+        "name": "C Dalga (Standart)", "caliper": 4.0, "ect": 5.2, "grammage": 480, "flute": "C", "cost_index": 1.15,
+        "paper_combination": "140 K / 125 F / 140 K"
     },
     "Çift Dalga - EB Dalga (Mikro/İnce - 4.5 mm)": {
-        "name": "EB Dalga (Dopel)", "caliper": 4.5, "ect": 6.2, "grammage": 550, "flute": "EB", "cost_index": 1.35
+        "name": "EB Dalga (Dopel)", "caliper": 4.5, "ect": 6.2, "grammage": 550, "flute": "EB", "cost_index": 1.35,
+        "paper_combination": "140 K / 110 F / 110 T / 110 F / 140 T"
     },
     "Çift Dalga - BC Dalga (Standart Dopel - 6.5 mm)": {
-        "name": "BC Dalga (Ağır Hizmet)", "caliper": 6.5, "ect": 8.0, "grammage": 620, "flute": "BC", "cost_index": 1.55
+        "name": "BC Dalga (Ağır Hizmet)", "caliper": 6.5, "ect": 8.0, "grammage": 620, "flute": "BC", "cost_index": 1.55,
+        "paper_combination": "175 K / 125 F / 125 T / 125 F / 175 K"
     },
     "Ağır Hizmet - AAC Dalga (Triplex - 10.0 mm)": {
-        "name": "AAC Dalga (Triplex)", "caliper": 10.0, "ect": 13.0, "grammage": 950, "flute": "AAC", "cost_index": 2.20
+        "name": "AAC Dalga (Triplex)", "caliper": 10.0, "ect": 13.0, "grammage": 950, "flute": "AAC", "cost_index": 2.20,
+        "paper_combination": "200 K / 140 F / 140 K / 140 F / 140 K / 140 F / 200 K"
     }
 }
 
@@ -122,7 +127,7 @@ if "active_step" not in st.session_state:
 def set_step(step_number):
     st.session_state["active_step"] = step_number
 
-# --- HESAPLAMA VE ÇİZİMLER ---
+# --- HESAPLAMA FONKSİYONLARI ---
 
 def calculate_environmental_safety_factor(temp_factor, humidity_rh, storage_days, stacking_pattern, overhang):
     h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.30 if humidity_rh <= 75 else (1.55 if humidity_rh <= 85 else 1.95)))
@@ -354,7 +359,7 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
     )
     return fig
 
-# --- PDF İÇİN 2B VEKTÖREL ÇİZİMLER ---
+# --- PDF ÇİZİM VE METİN DÜZELTME FONKSİYONLARI ---
 
 def pdf_draw_pallet_2d(pallet_l, pallet_w, coords, width=240, height=95):
     d = Drawing(width, height)
@@ -402,6 +407,8 @@ def tr_fix(text):
     mapping = {'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S', 'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'}
     for k, v in mapping.items(): text = text.replace(k, v)
     return text
+
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info):
     buf = io.BytesIO()
@@ -474,7 +481,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_mat)
     elements.append(Spacer(1, 4))
 
-    # 3. Paletleme ve İstif Doluluk Analizi (AYRI BAŞLIK)
+    # 3. Paletleme ve İstif Doluluk Analizi
     elements.append(Paragraph(tr_fix("3. Paletleme ve İstif Doluluk Analizi"), h2_style))
     d_pal_2d = pdf_draw_pallet_2d(pallet_info['dim'][0], pallet_info['dim'][1], pallet_info['coords'], width=240, height=95)
     
@@ -499,7 +506,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_pal_sec)
     elements.append(Spacer(1, 4))
 
-    # 4. Taşıt ve Konteyner Lojistik Analizi (AYRI BAŞLIK)
+    # 4. Taşıt ve Konteyner Lojistik Analizi
     elements.append(Paragraph(tr_fix("4. Taşıt ve Konteyner Lojistik Analizi"), h2_style))
     v_data = vehicle_info['data']
     d_veh_2d = pdf_draw_vehicle_2d(v_data['length'], v_data['width'], pallet_info['dim'][0], pallet_info['dim'][1], True, vehicle_info['pallets'], width=240, height=95)
@@ -528,6 +535,115 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
 
     footer_text = tr_fix("Raporlama & Mühendislik: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.) | McKee Mukavemet & ASTM D4169 Standartları")
     elements.append(Paragraph(footer_text, ParagraphStyle('FooterStyle', parent=normal_style, fontSize=6.5, textColor=colors.gray, alignment=1)))
+    doc.build(elements)
+    buf.seek(0)
+    return buf.getvalue()
+
+# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ ---
+
+def generate_box_spec_pdf(prod_info, storage_info, active_eval):
+    """Tedarikçiye verilmek üzere resmi Koli Satınalma Teknik Şartnamesi PDF'i üretir"""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=25, bottomMargin=25)
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('SpecTitle', parent=styles['Heading1'], fontSize=14, leading=17, textColor=colors.HexColor('#003366'), alignment=1)
+    sub_title = ParagraphStyle('SpecSub', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#333333'), alignment=1, fontName='Helvetica-Bold')
+    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontSize=10.5, leading=13, textColor=colors.HexColor('#1f77b4'), spaceBefore=8, spaceAfter=3)
+    normal = ParagraphStyle('SpecNorm', parent=styles['Normal'], fontSize=8, leading=10.5)
+    bold = ParagraphStyle('SpecBld', parent=styles['Normal'], fontSize=8, leading=10.5, fontName='Helvetica-Bold')
+
+    b_out = active_eval['box_out_dims']
+    box_in_l = prod_info['box_in_l']
+    box_in_w = prod_info['box_in_w']
+    box_in_h = prod_info['box_in_h']
+    b_data = BOARD_DATABASE[active_eval['key']]
+
+    elements = []
+    elements.append(Paragraph(tr_fix("OLUKLU MUKAVVA KOLİ TEKNİK SATINALMA ŞARTNAMESİ"), title_style))
+    elements.append(Paragraph(tr_fix("Hazırlayan: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)"), sub_title))
+    elements.append(Paragraph(tr_fix(f"Doküman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}"), ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
+    elements.append(Spacer(1, 8))
+
+    # 1. Genel Bilgiler
+    elements.append(Paragraph(tr_fix("1. Ürün ve Ambalaj Kimlik Bilgileri"), sec_title))
+    name_str = prod_info.get('box_name', '').strip() or "Standart Gida Kolisi"
+    code_str = prod_info.get('box_code', '').strip() or "BELIRTILMEDI"
+    t_id = Table([
+        [Paragraph(tr_fix("<b>Koli / Ürün Tanımı:</b>"), normal), Paragraph(tr_fix(name_str), normal), Paragraph(tr_fix("<b>Koli Kodu / SKU:</b>"), normal), Paragraph(tr_fix(code_str), normal)],
+        [Paragraph(tr_fix("<b>Koli Tipi (Standart):</b>"), normal), "FEFCO 0201 (Standart Yarık Açkılı)", Paragraph(tr_fix("<b>Baskı / Renk:</b>"), normal), "Flekso Baskı (Onaylı Klişe)"],
+        [Paragraph(tr_fix("<b>Birleştirme Yöntemi:</b>"), normal), "Tutkallı / Sıcak Yapıştırma (Hot-melt)", Paragraph(tr_fix("<b>Gıda Temas Uygunluğu:</b>"), normal), "Uygun (İkincil Dış Ambalaj)"]
+    ], colWidths=[120, 145, 120, 145])
+    t_id.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+    ]))
+    elements.append(t_id)
+
+    # 2. Boyutsal ve Geometrik Özellikler
+    elements.append(Paragraph(tr_fix("2. Boyutsal Özellikler ve Toleranslar"), sec_title))
+    t_dim = Table([
+        [Paragraph(tr_fix("<b>Ölçü Parametresi</b>"), bold), Paragraph(tr_fix("<b>Hedef Değer</b>"), bold), Paragraph(tr_fix("<b>Tolerans</b>"), bold), Paragraph(tr_fix("<b>Açıklama</b>"), bold)],
+        ["İç Ölçüler (L x W x H)", f"{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm", "± 2.0 mm", "Net ürün yerleşim hacmi"],
+        ["Dış Ölçüler (L x W x H)", f"{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm", "± 3.0 mm", "Lojistik / paletleme dış sınırı"],
+        ["Mukavva Kalınlığı (Caliper)", f"{active_eval['caliper']:.1f} mm", "± 0.2 mm", f"{b_data['flute']} Dalga Profili"],
+        ["Koli Boş Ağırlığı (Dara)", f"~{active_eval['gross_koli_kg'] - prod_info['net_kg']:.3f} kg", "± %5", "Gramaja bağlı teorik dara"]
+    ], colWidths=[130, 120, 80, 200])
+    t_dim.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+    ]))
+    elements.append(t_dim)
+
+    # 3. Mukavemet & Hammadde Kalite Kriterleri
+    elements.append(Paragraph(tr_fix("3. Mukavemet, ECT / BCT ve Kağıt Kalitesi Kriterleri"), sec_title))
+    t_str = Table([
+        [Paragraph(tr_fix("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(tr_fix("<b>Zorunlu Minimum Değer</b>"), bold), Paragraph(tr_fix("<b>Test Standardı</b>"), bold)],
+        ["Kenar Ezilme Direnci (ECT)", f"Minimum {active_eval['ect']:.2f} kN/m (Gereken: {active_eval['req_min_ect']:.2f} kN/m)", "ISO 3037 / TAPPI T 811"],
+        ["Koli Kutu Ezilme Dayanımı (BCT)", f"Minimum {active_eval['actual_bct_kgf']:.1f} kgf (Hedef Statik: {active_eval['target_required_bct_kgf']:.1f} kgf)", "ISO 12048 / ASTM D642"],
+        ["Dalga Cinsi ve Mukavva Tipi", f"{active_eval['key']}", "FEFCO Standardı"],
+        ["Önerilen Kağıt Reçetesi (Gramaj)", f"{b_data.get('paper_combination', 'Tedarikçi Standart')}", "ISO 536"],
+        ["Hedef Çevre Koşulu Dayanımı", f"{tr_fix(storage_info['env_name'])} (%{storage_info['rh']} RH)", "ASTM D4169 Şartlandırma"]
+    ], colWidths=[160, 220, 150])
+    t_str.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#003366')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+        ('TOPPADDING', (0,0), (-1,-1), 2.5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+    ]))
+    elements.append(t_str)
+
+    # 4. Kalite Kabul ve Sevk Şartları
+    elements.append(Paragraph(tr_fix("4. Kalite Kontrol, Kabul ve Sevk Kriterleri"), sec_title))
+    criteria_text = """
+    • <b>Nem Oranı:</b> Teslimat anında mukavva rutubeti <b>%7 - %9</b> aralığında olmalıdır. %10 üzeri partiler mukavemet zaafiyeti nedeniyle reddedilir.<br/>
+    • <b>Pilyaj ve Katlama Çizgileri:</b> Koli katlama izleri pilyaj kırımında çatlama ve yırtılma yapmamalı, otomatik koli kurma hatlarına uygun olmalıdır.<br/>
+    • <b>Paletleme ve Koruma:</b> Sevk edilen boş koliler palet üzerinde düzgün istiflenmiş, alttan ve üstten koruyucu mukavva kapak konularak neme karşı streçlenmiş olmalıdır.<br/>
+    • <b>Parti Uygunluğu:</b> Tedarikçi, her sevk partisiyle birlikte ilgili lota ait <b>ECT Test Raporunu</b> ibraz etmekle yükümlüdür.
+    """
+    elements.append(Paragraph(tr_fix(criteria_text), normal))
+    elements.append(Spacer(1, 10))
+
+    # Onay Alanı
+    t_sign = Table([
+        [Paragraph(tr_fix("<b>ALICI FİRMA ONAYI</b><br/>Okyanus Danışmanlık Kalite Güvence"), normal),
+         Paragraph(tr_fix("<b>TEDARİKÇİ FİRMA TAAHHÜTNAMESİ</b><br/>Yukarıdaki teknik şartları eksiksiz kabul ederiz."), normal)],
+        [Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal), Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal)]
+    ], colWidths=[265, 265])
+    t_sign.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#888888')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4)
+    ]))
+    elements.append(t_sign)
+
     doc.build(elements)
     buf.seek(0)
     return buf.getvalue()
@@ -692,13 +808,13 @@ loose_vol_util = (loose_total_vol_m3 / vehicle_volume_m3) * 100
 extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100 if pallet_total_boxes > 0 else 0
 recommended_shipping = "Dökme Yükleme" if ("Konteyner" in active_vehicle and extra_capacity_percent > 20 and not is_cold_storage) else "Paletli Yükleme"
 
-# PDF Paketi
+# PDF Paketleri
 pdf_product_dict = {
     'l': int(p_length), 'w': int(p_width), 'h': int(p_height),
     'weight': int(p_weight), 'units': total_units_box,
     'nx': int(nx), 'ny': int(ny), 'nz': int(nz),
     'net_kg': net_contents_kg, 'box_name': box_name_input, 'box_code': box_code_input,
-    'box_fill_rate': box_fill_rate, 'box_in_l': box_in_l, 'box_in_w': box_in_w
+    'box_fill_rate': box_fill_rate, 'box_in_l': box_in_l, 'box_in_w': box_in_w, 'box_in_h': box_in_h
 }
 pdf_storage_dict = {'env_name': env_choice, 'rh': humidity_rh, 'days': storage_days, 'pattern': active_stacking}
 pdf_pallet_dict = {
@@ -719,9 +835,12 @@ pdf_vehicle_dict = {
     'loose_total_vol': loose_total_vol_m3, 'loose_vol_util': loose_vol_util
 }
 
-pdf_bytes = generate_pdf_report(pdf_product_dict, pdf_storage_dict, active_eval, board_evaluations, pdf_pallet_dict, pdf_vehicle_dict)
+pdf_report_bytes = generate_pdf_report(pdf_product_dict, pdf_storage_dict, active_eval, board_evaluations, pdf_pallet_dict, pdf_vehicle_dict)
+pdf_spec_bytes = generate_box_spec_pdf(pdf_product_dict, pdf_storage_dict, active_eval)
+
 safe_sku = re.sub(r'[^a-zA-Z0-9_-]', '_', box_code_input.strip()) if box_code_input else ""
-pdf_file_title = f"Sonuc_Raporu_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Sonuc_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+pdf_report_name = f"Sonuc_Raporu_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Sonuc_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+pdf_spec_name = f"Koli_Teknik_Sartname_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Koli_Teknik_Sartname_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
 # --- BELİRGİN BAŞLIK VE PDF İNDİRME ALANI ---
 
@@ -752,8 +871,8 @@ with col_btn:
     """, unsafe_allow_html=True)
     st.download_button(
         label="📥 Sonuç Raporu (PDF)",
-        data=pdf_bytes,
-        file_name=pdf_file_title,
+        data=pdf_report_bytes,
+        file_name=pdf_report_name,
         mime="application/pdf",
         use_container_width=True
     )
@@ -770,7 +889,7 @@ nav_col1, nav_col2, nav_col3 = st.columns(3)
 with nav_col1:
     btn_type1 = "primary" if cur_step == 1 else "secondary"
     st.button(
-        "🔬 **1. ADIM:** Mukavemet & Mukavva Kalitesi",
+        "🔬 **1. ADIM:** Mukavemet & Şartname",
         key="nav_step_1",
         type=btn_type1,
         use_container_width=True,
@@ -780,7 +899,7 @@ with nav_col1:
     if cur_step == 1:
         st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Ezilme Dayanımı & Hedef BCT</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Ezilme Dayanımı & Satınalma Şartnamesi</div>", unsafe_allow_html=True)
 
 with nav_col2:
     btn_type2 = "primary" if cur_step == 2 else "secondary"
@@ -817,7 +936,7 @@ st.progress(progress_val)
 st.write("")
 
 # ==============================================================================
-# === EKRAN 1: MUKAVEMET VE MUKAVVA SEÇİMİ ===
+# === EKRAN 1: MUKAVEMET, TAVSİYE & TEKNİK ŞARTNAME ===
 # ==============================================================================
 if cur_step == 1:
     st.subheader(f"🎯 1. Adım: Hedef Koli Mukavemet Analizi ({env_choice})")
@@ -832,6 +951,28 @@ if cur_step == 1:
         st.success(f"🏆 **ÖNERİLEN MUKAVVA YAPISI: {recommended_board_key}**\n\nBu mukavva yapısı, belirtilen **{selected_env['temp_desc']}** ve **%{humidity_rh} RH** ortam şartlarında gereken `{active_eval['target_required_bct_kgf']:.1f} kgf` hedef mukavemeti **{active_eval['safety_margin']:.2f}x güvenlik payı** ile karşılayan en ekonomik kalitedir.")
     else:
         st.error(f"⚠️ **DİKKAT: Standart mukavvalar yetersiz kalıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile hedefin altında kalmaktadır. Kat sayısını düşürün veya koli içi seperatör/destek kullanın.")
+
+    # --- KOLİ SATINALMA TEKNİK ŞARTNAME PANELİ ---
+    with st.expander("📋 Tedarikçiye Gönderilecek Koli Satınalma Teknik Şartnamesi (İncele & İndir)", expanded=True):
+        st.markdown(f"""
+        ### 📄 Oluklu Mukavva Koli Satınalma Şartnamesi Özeti
+        * **Koli Tipi & Standart:** FEFCO 0201 (Standart Yarık Açkılı Koli)
+        * **Tavsiye Edilen Mukavva Kalitesi:** `{active_eval['key']}`
+        * **Koli İç Ölçüleri:** `{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm (±2 mm)`
+        * **Koli Dış Ölçüleri:** `{int(box_out_l)} x {int(box_out_w)} x {int(box_out_h)} mm (±3 mm)`
+        * **Minimum Kenar Ezilme Direnci (ECT):** `≥ {active_eval['ect']:.2f} kN/m` (ISO 3037 Standardı)
+        * **Minimum Kutu Dayanımı (BCT):** `≥ {active_eval['actual_bct_kgf']:.1f} kgf` (ISO 12048 Standardı)
+        * **Önerilen Kağıt Kombinasyonu:** `{BOARD_DATABASE[active_eval['key']].get('paper_combination', 'Tedarikçi Standart')}`
+        * **Maksimum İzin Verilen Nem Oranı:** `%7 - %9 (Teslimatta %10 üzeri partiler reddedilir)`
+        """)
+        
+        st.download_button(
+            label="📄 Koli Satınalma Teknik Şartnamesini İndir (Tedarikçi İçin PDF)",
+            data=pdf_spec_bytes,
+            file_name=pdf_spec_name,
+            mime="application/pdf",
+            use_container_width=True
+        )
 
     st.subheader("📋 Mukavva Kalitelerinin Hedef Mukavemete Uygunluk Matrisi")
     table_rows = []
