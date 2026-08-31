@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Koli Satınalma Teknik Şartnameli)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Şartname Künyesi Sadeleştirilmiş)
 """
 
 import streamlit as st
@@ -30,7 +30,7 @@ st.set_page_config(
 # Mukavva Veritabanı
 BOARD_DATABASE = {
     "Tek Dalga - B Dalga (İnce - 3.0 mm)": {
-        "name": "B Dalga (İnce)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0,
+        "name": "B Dalga (Ince)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0,
         "paper_combination": "140 K / 110 F / 140 T"
     },
     "Tek Dalga - C Dalga (Orta - 4.0 mm)": {
@@ -42,7 +42,7 @@ BOARD_DATABASE = {
         "paper_combination": "140 K / 110 F / 110 T / 110 F / 140 T"
     },
     "Çift Dalga - BC Dalga (Standart Dopel - 6.5 mm)": {
-        "name": "BC Dalga (Ağır Hizmet)", "caliper": 6.5, "ect": 8.0, "grammage": 620, "flute": "BC", "cost_index": 1.55,
+        "name": "BC Dalga (Agir Hizmet)", "caliper": 6.5, "ect": 8.0, "grammage": 620, "flute": "BC", "cost_index": 1.55,
         "paper_combination": "175 K / 125 F / 125 T / 125 F / 175 K"
     },
     "Ağır Hizmet - AAC Dalga (Triplex - 10.0 mm)": {
@@ -53,32 +53,32 @@ BOARD_DATABASE = {
 
 STORAGE_ENVIRONMENTS = {
     "Oda Sıcaklığı (İklimlendirme Yok / Kontrolsüz)": {
-        "temp_desc": "Mevsimsel Değişken (15°C - 35°C)",
+        "temp_desc": "Mevsimsel Degisken (15°C - 35°C)",
         "base_temp_factor": 1.25,
         "default_rh": 70,
         "is_cold": False,
-        "desc": "Gece-gündüz yoğuşması ve kontrolsüz bağıl nem riski."
+        "desc": "Gece-gunduz yogusmasi ve kontrolsuz bagil nem riski."
     },
     "+20°C Kontrollü Ortam (Klimalı Kuru Gıda Deposu)": {
         "temp_desc": "+18°C / +22°C Sabit",
         "base_temp_factor": 1.00,
         "default_rh": 55,
         "is_cold": False,
-        "desc": "Kuru gıda referans koşulu. Lif mukavemet kaybı düşüktür."
+        "desc": "Kuru gida referans kosulu. Lif mukavemet kaybi dusuktur."
     },
     "+4°C Soğuk Hava Deposu (Taze / Süt / Şarküteri)": {
-        "temp_desc": "+2°C / +6°C Soğuk Zincir",
+        "temp_desc": "+2°C / +6°C Soguk Zincir",
         "base_temp_factor": 1.55,
         "default_rh": 85,
         "is_cold": True,
-        "desc": "Evaporatör nemi nedeniyle liflerde %35-50 yumuşama."
+        "desc": "Evaporator nemi nedeniyle liflerde %35-50 yumusama."
     },
     "-18°C Donuk Muhafaza (Deep Freeze)": {
         "temp_desc": "-18°C / -22°C Donuk Depo",
         "base_temp_factor": 1.35,
         "default_rh": 90,
         "is_cold": True,
-        "desc": "Lif kırılganlığı ve çıkışta yoğuşma (terleme) riski."
+        "desc": "Lif kirilganligi ve cikista terleme riski."
     }
 }
 
@@ -194,7 +194,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
     patterns.sort(key=lambda x: (x["count"], x["efficiency"]), reverse=True)
     return patterns
 
-# --- PLOTLY 2B/3B ÇİZİMLER ---
+# --- PLOTLY ÇİZİM FONKSİYONLARI ---
 
 def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
@@ -359,7 +359,7 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
     )
     return fig
 
-# --- PDF ÇİZİM VE METİN DÜZELTME FONKSİYONLARI ---
+# --- PDF İÇİN 2B VEKTÖREL ÇİZİMLER ---
 
 def pdf_draw_pallet_2d(pallet_l, pallet_w, coords, width=240, height=95):
     d = Drawing(width, height)
@@ -547,11 +547,10 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=25, bottomMargin=25)
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('SpecTitle', parent=styles['Heading1'], fontSize=14, leading=17, textColor=colors.HexColor('#003366'), alignment=1)
-    sub_title = ParagraphStyle('SpecSub', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#333333'), alignment=1, fontName='Helvetica-Bold')
-    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontSize=10.5, leading=13, textColor=colors.HexColor('#1f77b4'), spaceBefore=8, spaceAfter=3)
-    normal = ParagraphStyle('SpecNorm', parent=styles['Normal'], fontSize=8, leading=10.5)
-    bold = ParagraphStyle('SpecBld', parent=styles['Normal'], fontSize=8, leading=10.5, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('SpecTitle', parent=styles['Heading1'], fontSize=13, leading=16, textColor=colors.HexColor('#003366'), alignment=1)
+    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontSize=9.5, leading=12, textColor=colors.HexColor('#1f77b4'), spaceBefore=6, spaceAfter=2)
+    normal = ParagraphStyle('SpecNorm', parent=styles['Normal'], fontSize=7.5, leading=10)
+    bold = ParagraphStyle('SpecBld', parent=styles['Normal'], fontSize=7.5, leading=10, fontName='Helvetica-Bold')
 
     b_out = active_eval['box_out_dims']
     box_in_l = prod_info['box_in_l']
@@ -560,87 +559,89 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     b_data = BOARD_DATABASE[active_eval['key']]
 
     elements = []
-    elements.append(Paragraph(tr_fix("OLUKLU MUKAVVA KOLİ TEKNİK SATINALMA ŞARTNAMESİ"), title_style))
-    elements.append(Paragraph(tr_fix("Hazırlayan: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)"), sub_title))
-    elements.append(Paragraph(tr_fix(f"Doküman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}"), ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
-    elements.append(Spacer(1, 8))
+    elements.append(Paragraph(tr_fix("OLUKLU MUKAVVA KOLI TEKNIK SATINALMA SARTNAMESI"), title_style))
+    elements.append(Paragraph(tr_fix(f"Dokuman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}"), ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
+    elements.append(Spacer(1, 6))
 
     # 1. Genel Bilgiler
-    elements.append(Paragraph(tr_fix("1. Ürün ve Ambalaj Kimlik Bilgileri"), sec_title))
+    elements.append(Paragraph(tr_fix("1. Urun ve Ambalaj Kimlik Bilgileri"), sec_title))
     name_str = prod_info.get('box_name', '').strip() or "Standart Gida Kolisi"
     code_str = prod_info.get('box_code', '').strip() or "BELIRTILMEDI"
     t_id = Table([
-        [Paragraph(tr_fix("<b>Koli / Ürün Tanımı:</b>"), normal), Paragraph(tr_fix(name_str), normal), Paragraph(tr_fix("<b>Koli Kodu / SKU:</b>"), normal), Paragraph(tr_fix(code_str), normal)],
-        [Paragraph(tr_fix("<b>Koli Tipi (Standart):</b>"), normal), "FEFCO 0201 (Standart Yarık Açkılı)", Paragraph(tr_fix("<b>Baskı / Renk:</b>"), normal), "Flekso Baskı (Onaylı Klişe)"],
-        [Paragraph(tr_fix("<b>Birleştirme Yöntemi:</b>"), normal), "Tutkallı / Sıcak Yapıştırma (Hot-melt)", Paragraph(tr_fix("<b>Gıda Temas Uygunluğu:</b>"), normal), "Uygun (İkincil Dış Ambalaj)"]
-    ], colWidths=[120, 145, 120, 145])
+        [Paragraph(tr_fix("<b>Koli / Urun Tanimi:</b>"), normal), Paragraph(tr_fix(name_str), normal), Paragraph(tr_fix("<b>Koli Kodu / SKU:</b>"), normal), Paragraph(tr_fix(code_str), normal)],
+        [Paragraph(tr_fix("<b>Koli Tipi (Standart):</b>"), normal), Paragraph(tr_fix("FEFCO 0201 (Standart Yarik Ackili)"), normal), Paragraph(tr_fix("<b>Baski / Renk:</b>"), normal), Paragraph(tr_fix("Flekso Baski (Onayli Klise)"), normal)],
+        [Paragraph(tr_fix("<b>Birlestirme Yontemi:</b>"), normal), Paragraph(tr_fix("Tutkalli / Sicak Yapistirma (Hot-melt)"), normal), Paragraph(tr_fix("<b>Gida Temas Uygunlugu:</b>"), normal), Paragraph(tr_fix("Uygun (Ikincil Dis Ambalaj)"), normal)]
+    ], colWidths=[120, 145, 120, 150])
     t_id.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
-        ('TOPPADDING', (0,0), (-1,-1), 2.5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2.2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
     ]))
     elements.append(t_id)
 
     # 2. Boyutsal ve Geometrik Özellikler
-    elements.append(Paragraph(tr_fix("2. Boyutsal Özellikler ve Toleranslar"), sec_title))
+    elements.append(Paragraph(tr_fix("2. Boyutsal Ozellikler ve Toleranslar"), sec_title))
     t_dim = Table([
-        [Paragraph(tr_fix("<b>Ölçü Parametresi</b>"), bold), Paragraph(tr_fix("<b>Hedef Değer</b>"), bold), Paragraph(tr_fix("<b>Tolerans</b>"), bold), Paragraph(tr_fix("<b>Açıklama</b>"), bold)],
-        ["İç Ölçüler (L x W x H)", f"{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm", "± 2.0 mm", "Net ürün yerleşim hacmi"],
-        ["Dış Ölçüler (L x W x H)", f"{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm", "± 3.0 mm", "Lojistik / paletleme dış sınırı"],
-        ["Mukavva Kalınlığı (Caliper)", f"{active_eval['caliper']:.1f} mm", "± 0.2 mm", f"{b_data['flute']} Dalga Profili"],
-        ["Koli Boş Ağırlığı (Dara)", f"~{active_eval['gross_koli_kg'] - prod_info['net_kg']:.3f} kg", "± %5", "Gramaja bağlı teorik dara"]
-    ], colWidths=[130, 120, 80, 200])
+        [Paragraph(tr_fix("<b>Olcu Parametresi</b>"), bold), Paragraph(tr_fix("<b>Hedef Deger</b>"), bold), Paragraph(tr_fix("<b>Tolerans</b>"), bold), Paragraph(tr_fix("<b>Aciklama</b>"), bold)],
+        [Paragraph(tr_fix("Ic Olculer (L x W x H)"), normal), f"{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm", "± 2.0 mm", Paragraph(tr_fix("Net urun yerlesim hacmi"), normal)],
+        [Paragraph(tr_fix("Dis Olculer (L x W x H)"), normal), f"{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm", "± 3.0 mm", Paragraph(tr_fix("Lojistik / paletleme dis siniri"), normal)],
+        [Paragraph(tr_fix("Mukavva Kalinligi (Caliper)"), normal), f"{active_eval['caliper']:.1f} mm", "± 0.2 mm", Paragraph(tr_fix(f"{b_data['flute']} Dalga Profili"), normal)],
+        [Paragraph(tr_fix("Koli Bos Agirligi (Dara)"), normal), f"~{active_eval['gross_koli_kg'] - prod_info['net_kg']:.3f} kg", "± %5", Paragraph(tr_fix("Gramaja bagli teorik dara"), normal)]
+    ], colWidths=[140, 125, 80, 190])
     t_dim.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
-        ('TOPPADDING', (0,0), (-1,-1), 2.5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2.2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
     ]))
     elements.append(t_dim)
 
     # 3. Mukavemet & Hammadde Kalite Kriterleri
-    elements.append(Paragraph(tr_fix("3. Mukavemet, ECT / BCT ve Kağıt Kalitesi Kriterleri"), sec_title))
+    elements.append(Paragraph(tr_fix("3. Mukavemet, ECT / BCT ve Kagit Kalitesi Kriterleri"), sec_title))
     t_str = Table([
-        [Paragraph(tr_fix("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(tr_fix("<b>Zorunlu Minimum Değer</b>"), bold), Paragraph(tr_fix("<b>Test Standardı</b>"), bold)],
-        ["Kenar Ezilme Direnci (ECT)", f"Minimum {active_eval['ect']:.2f} kN/m (Gereken: {active_eval['req_min_ect']:.2f} kN/m)", "ISO 3037 / TAPPI T 811"],
-        ["Koli Kutu Ezilme Dayanımı (BCT)", f"Minimum {active_eval['actual_bct_kgf']:.1f} kgf (Hedef Statik: {active_eval['target_required_bct_kgf']:.1f} kgf)", "ISO 12048 / ASTM D642"],
-        ["Dalga Cinsi ve Mukavva Tipi", f"{active_eval['key']}", "FEFCO Standardı"],
-        ["Önerilen Kağıt Reçetesi (Gramaj)", f"{b_data.get('paper_combination', 'Tedarikçi Standart')}", "ISO 536"],
-        ["Hedef Çevre Koşulu Dayanımı", f"{tr_fix(storage_info['env_name'])} (%{storage_info['rh']} RH)", "ASTM D4169 Şartlandırma"]
-    ], colWidths=[160, 220, 150])
+        [Paragraph(tr_fix("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(tr_fix("<b>Zorunlu Minimum Deger</b>"), bold), Paragraph(tr_fix("<b>Test Standardi</b>"), bold)],
+        [Paragraph(tr_fix("Kenar Ezilme Direnci (ECT)"), normal), Paragraph(tr_fix(f"Minimum {active_eval['ect']:.2f} kN/m (Gereken: {active_eval['req_min_ect']:.2f} kN/m)"), normal), "ISO 3037 / TAPPI T 811"],
+        [Paragraph(tr_fix("Koli Kutu Ezilme Dayanimi (BCT)"), normal), Paragraph(tr_fix(f"Minimum {active_eval['actual_bct_kgf']:.1f} kgf (Hedef Statik: {active_eval['target_required_bct_kgf']:.1f} kgf)"), normal), "ISO 12048 / ASTM D642"],
+        [Paragraph(tr_fix("Dalga Cinsi ve Mukavva Tipi"), normal), Paragraph(tr_fix(f"{active_eval['key']}"), normal), Paragraph(tr_fix("FEFCO Standardi"), normal)],
+        [Paragraph(tr_fix("Onerilen Kagit Recetesi (Gramaj)"), normal), Paragraph(tr_fix(f"{b_data.get('paper_combination', 'Tedarikci Standart')}"), normal), "ISO 536"],
+        [Paragraph(tr_fix("Hedef Cevre Kosulu Dayanimi"), normal), Paragraph(tr_fix(f"{storage_info['env_name']} (%{storage_info['rh']} RH)"), normal), Paragraph(tr_fix("ASTM D4169 Sartlandirma"), normal)]
+    ], colWidths=[160, 225, 150])
     t_str.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#003366')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
-        ('TOPPADDING', (0,0), (-1,-1), 2.5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2.2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
     ]))
     elements.append(t_str)
 
     # 4. Kalite Kabul ve Sevk Şartları
     elements.append(Paragraph(tr_fix("4. Kalite Kontrol, Kabul ve Sevk Kriterleri"), sec_title))
     criteria_text = """
-    • <b>Nem Oranı:</b> Teslimat anında mukavva rutubeti <b>%7 - %9</b> aralığında olmalıdır. %10 üzeri partiler mukavemet zaafiyeti nedeniyle reddedilir.<br/>
-    • <b>Pilyaj ve Katlama Çizgileri:</b> Koli katlama izleri pilyaj kırımında çatlama ve yırtılma yapmamalı, otomatik koli kurma hatlarına uygun olmalıdır.<br/>
-    • <b>Paletleme ve Koruma:</b> Sevk edilen boş koliler palet üzerinde düzgün istiflenmiş, alttan ve üstten koruyucu mukavva kapak konularak neme karşı streçlenmiş olmalıdır.<br/>
-    • <b>Parti Uygunluğu:</b> Tedarikçi, her sevk partisiyle birlikte ilgili lota ait <b>ECT Test Raporunu</b> ibraz etmekle yükümlüdür.
+    • <b>Nem Orani:</b> Teslimat aninda mukavva rutubeti <b>%7 - %9</b> araliginda olmalidir. %10 uzeri partiler mukavemet zaafiyeti nedeniyle reddedilir.<br/>
+    • <b>Pilyaj ve Katlama Cizgileri:</b> Koli katlama izleri pilyaj kiriminda catlama ve yirtilma yapmamali, otomatik koli kurma hatlarina uygun olmalidir.<br/>
+    • <b>Paletleme ve Koruma:</b> Sevk edilen bos koliler palet uzerinde duzgun istiflenmis, alttan ve ustten koruyucu mukavva kapak konularak neme karsi streclenmis olmalidir.<br/>
+    • <b>Parti Uygunlugu:</b> Tedarikci, her sevk partisiyle birlikte ilgili lota ait <b>ECT Test Raporunu</b> ibraz etmekle yukumludur.
     """
     elements.append(Paragraph(tr_fix(criteria_text), normal))
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 8))
 
     # Onay Alanı
     t_sign = Table([
-        [Paragraph(tr_fix("<b>ALICI FİRMA ONAYI</b><br/>Okyanus Danışmanlık Kalite Güvence"), normal),
-         Paragraph(tr_fix("<b>TEDARİKÇİ FİRMA TAAHHÜTNAMESİ</b><br/>Yukarıdaki teknik şartları eksiksiz kabul ederiz."), normal)],
-        [Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal), Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal)]
+        [Paragraph(tr_fix("<b>ALICI FIRMA ONAYI</b><br/>Kalite Guvence / Satinalma Birimi"), normal),
+         Paragraph(tr_fix("<b>TEDARIKCI FIRMA TAAHHUTNAMESI</b><br/>Yukaridaki teknik sartlari eksiksiz kabul ederiz."), normal)],
+        [Paragraph("<br/><br/>Imza / Kase:<br/>Tarih:", normal), Paragraph("<br/><br/>Imza / Kase:<br/>Tarih:", normal)]
     ], colWidths=[265, 265])
     t_sign.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#888888')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4)
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3)
     ]))
     elements.append(t_sign)
 
@@ -842,7 +843,7 @@ safe_sku = re.sub(r'[^a-zA-Z0-9_-]', '_', box_code_input.strip()) if box_code_in
 pdf_report_name = f"Sonuc_Raporu_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Sonuc_Raporu_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 pdf_spec_name = f"Koli_Teknik_Sartname_{safe_sku}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf" if safe_sku else f"Koli_Teknik_Sartname_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
-# --- BELİRGİN BAŞLIK VE PDF İNDİRME ALANI ---
+# --- BAŞLIK VE PDF İNDİRME ALANI ---
 
 col_head, col_btn = st.columns([2.8, 1.4])
 with col_head:
@@ -879,7 +880,7 @@ with col_btn:
 
 st.divider()
 
-# --- GÖRSEL VE İNTERAKTİF ADIM NAVİGASYONU (WIZARD) ---
+# --- GÖRSEL ADIM NAVİGASYONU ---
 
 cur_step = st.session_state["active_step"]
 
@@ -952,7 +953,6 @@ if cur_step == 1:
     else:
         st.error(f"⚠️ **DİKKAT: Standart mukavvalar yetersiz kalıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile hedefin altında kalmaktadır. Kat sayısını düşürün veya koli içi seperatör/destek kullanın.")
 
-    # --- KOLİ SATINALMA TEKNİK ŞARTNAME PANELİ ---
     with st.expander("📋 Tedarikçiye Gönderilecek Koli Satınalma Teknik Şartnamesi (İncele & İndir)", expanded=True):
         st.markdown(f"""
         ### 📄 Oluklu Mukavva Koli Satınalma Şartnamesi Özeti
