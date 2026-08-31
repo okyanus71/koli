@@ -16,7 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Mukavva Veritabanı (Dalga, Kalınlık mm, Tipik ECT kN/m, Gramaj g/m2)
+# Mukavva Veritabanı
 BOARD_DATABASE = {
     "Tek Dalga - B Dalga (İnce - 3.0 mm)": {
         "name": "B Dalga (İnce)", "caliper": 3.0, "ect": 4.2, "grammage": 430, "flute": "B", "cost_index": 1.0
@@ -83,7 +83,22 @@ VEHICLE_DATABASE = {
     }
 }
 
-# --- FONKSİYONLAR ---
+# --- İSTİF DESENİ SENKRONİZASYON DURUMU (SESSION STATE) ---
+STACK_OPTIONS = [
+    "Kolon (Üst Üste - %100 Direnç)",
+    "Kilitli / Çapraz (%45 Kayıp)"
+]
+
+if "stacking_pattern_state" not in st.session_state:
+    st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
+
+def update_pattern_from_sidebar():
+    st.session_state["stacking_pattern_state"] = st.session_state["sidebar_pattern_input"]
+
+def update_pattern_from_main():
+    st.session_state["stacking_pattern_state"] = st.session_state["main_pattern_input"]
+
+# --- HESAPLAMA VE GÖRSELLEŞTİRME FONKSİYONLARI ---
 
 def calculate_environmental_safety_factor(temp_factor, humidity_rh, storage_days, stacking_pattern, overhang):
     h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.30 if humidity_rh <= 75 else (1.55 if humidity_rh <= 85 else 1.95)))
@@ -100,19 +115,18 @@ def calculate_mckee_bct(ect_kn_m, caliper_mm, perimeter_mm):
 
 def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
     patterns = []
-    # 1. Boyuna
     nx1 = int(pallet_l // box_l)
     ny1 = int(pallet_w // box_w)
     c1 = nx1 * ny1
     if c1 > 0:
         patterns.append({"name": "Düz Boyuna (Kolon)", "count": c1, "efficiency": (c1*box_l*box_w)/(pallet_l*pallet_w)*100, "type": "align_l", "nx": nx1, "ny": ny1, "desc": f"{nx1}x{ny1} Düz"})
-    # 2. Enine
+
     nx2 = int(pallet_l // box_w)
     ny2 = int(pallet_w // box_l)
     c2 = nx2 * ny2
     if c2 > 0:
         patterns.append({"name": "Düz Enine (90°)", "count": c2, "efficiency": (c2*box_l*box_w)/(pallet_l*pallet_w)*100, "type": "align_w", "nx": nx2, "ny": ny2, "desc": f"{nx2}x{ny2} Enine"})
-    # 3. Hibrit
+
     best_h = None
     max_h = 0
     for split_x in range(1, int(pallet_l // box_l) + 1):
@@ -181,7 +195,7 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
 st.title("🔬 Gıda Koli Mukavemet & Lojistik Mühendisliği")
 st.caption("Bu araç, gıda ürününüz ve **zorunlu depolama koşullarınıza** göre önce **Hedef Koli Mukavemetini (Gereken BCT & ECT)** hesaplar; ardından bu mukavemeti sağlayacak **en uygun mukavva yapısını** ve lojistik yerleşimini belirler.")
 
-# SIDEBAR: ZORUNLU PARAMETRELER
+# SIDEBAR GİRDİLERİ
 with st.sidebar:
     st.header("1. Birincil Ürün Bilgileri")
     p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=120.0, step=5.0)
@@ -200,7 +214,16 @@ with st.sidebar:
     selected_env = STORAGE_ENVIRONMENTS[env_choice]
     humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, selected_env["default_rh"], step=5)
     storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
-    stacking_pattern = st.selectbox("İstif Deseni", ["Kolon (Üst Üste - %100 Direnç)", "Kilitli / Çapraz (%45 Kayıp)"])
+    
+    # Sidebar İstif Deseni
+    current_idx_sb = STACK_OPTIONS.index(st.session_state["stacking_pattern_state"])
+    st.selectbox(
+        "İstif Deseni",
+        STACK_OPTIONS,
+        index=current_idx_sb,
+        key="sidebar_pattern_input",
+        on_change=update_pattern_from_sidebar
+    )
     overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
 
     st.header("4. Palet ve Taşıma Kriterleri")
@@ -209,20 +232,19 @@ with st.sidebar:
     max_pallet_h = st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=1750, step=50)
     vehicle_choice = st.selectbox("Taşıma Aracı", list(VEHICLE_DATABASE.keys()))
 
-# --- TEMEL MUKAVEMET & HEDEF HESAPLARI ---
+# --- TEMEL MUKAVEMET VE HEDEF HESAPLAMALARI ---
 
-# Koli İç Ölçüleri (+4mm boşluk payı)
+active_stacking_pattern = st.session_state["stacking_pattern_state"]
+
 box_in_l = (p_length * nx) + 4
 box_in_w = (p_width * ny) + 4
 box_in_h = (p_height * nz) + 4
 net_contents_kg = (total_units_box * p_weight) / 1000
 
-# Emniyet Katsayısı ($S_f$)
 sf, temp_f, hf, tf, pf, of = calculate_environmental_safety_factor(
-    selected_env["base_temp_factor"], humidity_rh, storage_days, stacking_pattern, overhang
+    selected_env["base_temp_factor"], humidity_rh, storage_days, active_stacking_pattern, overhang
 )
 
-# Her mukavva yapısı için dayanım ve uygunluk analizi
 board_evaluations = []
 recommended_board_key = None
 
@@ -231,13 +253,11 @@ for key, bdata in BOARD_DATABASE.items():
     ect = bdata["ect"]
     grammage = bdata["grammage"]
     
-    # Dış ölçü ve çevre
     b_out_l = box_in_l + (2 * caliper)
     b_out_w = box_in_w + (2 * caliper)
     b_out_h = box_in_h + (3 * caliper)
     perimeter = 2 * (b_out_l + b_out_w)
     
-    # Kat sayısı
     usable_h = max_pallet_h - 145
     layers = int(usable_h // b_out_h)
     if layers < 1:
@@ -247,15 +267,11 @@ for key, bdata in BOARD_DATABASE.items():
     tare_kg = (blank_m2 * grammage) / 1000
     gross_koli_kg = net_contents_kg + tare_kg
     
-    # Hedef statik yük ve gereken dinamik BCT
     dead_load_kgf = gross_koli_kg * (layers - 1)
     target_required_bct_kgf = dead_load_kgf * sf
     
-    # McKee Formülü ile sağlanan BCT
     actual_bct_n, actual_bct_kgf = calculate_mckee_bct(ect, caliper, perimeter)
     
-    # Gereken Minimum ECT (McKee'den ters hesap)
-    # BCT(N) = 5.87 * ECT * sqrt(caliper * perimeter) => ECT = BCT(N) / (5.87 * sqrt(caliper * perimeter))
     target_bct_n = target_required_bct_kgf * 9.80665
     req_min_ect = target_bct_n / (5.87 * math.sqrt(caliper * perimeter)) if (caliper * perimeter) > 0 else 0
     
@@ -279,27 +295,23 @@ for key, bdata in BOARD_DATABASE.items():
     }
     board_evaluations.append(eval_item)
     
-    # En uygun (en düşük maliyetli ve güvenli) mukavvayı seç
     if is_safe and (recommended_board_key is None):
         recommended_board_key = key
 
-# Hiçbiri kurtarmıyorsa en güçlü olanı seç
 if recommended_board_key is None:
     recommended_board_key = list(BOARD_DATABASE.keys())[-1]
 
-# Seçili / Önerilen aktif mukavvanın verileri
 active_eval = next(item for item in board_evaluations if item["key"] == recommended_board_key)
 box_out_l, box_out_w, box_out_h = active_eval["box_out_dims"]
 gross_box_kg = active_eval["gross_koli_kg"]
 layers_per_pallet = active_eval["layers"]
 
-# Palet Yerleşimi
 patterns = calculate_pallet_patterns(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w)
 selected_pattern = patterns[0]
 total_boxes_pallet = selected_pattern["count"] * layers_per_pallet
 total_pallet_gross = (total_boxes_pallet * gross_box_kg) + 25
 
-# --- TAB YAPILANDIRMASI (MUKAVEMET 1. SIRADA) ---
+# --- TAB YAPILANDIRMASI ---
 tab1, tab2, tab3 = st.tabs([
     "🔬 1. Mukavemet Raporu & Mukavva Kalitesi Tavsiyesi",
     "📦 2. Koli & Palet Dizilim Optimizasyonu",
@@ -324,36 +336,32 @@ with tab1:
     else:
         st.error(f"⚠️ **DİKKAT: Standart mukavvalar yetersiz kalıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile hedefin altında kalmaktadır. Kat sayısını düşürün veya koli içi seperatör/destek kullanın.")
 
-    # Mukavva Karşılaştırma ve Reçete Tablosu
+    # Matris Başlığı ve Doğrudan İstif Deseni Seçim Alanı
     st.subheader("📋 Mukavva Kalitelerinin Hedef Mukavemete Uygunluk Matrisi")
+    
+    col_mat_title, col_mat_sel = st.columns([1.5, 1])
+    with col_mat_title:
+        st.caption("Aşağıdaki tablodan depolama şartlarınıza göre mukavemet durumunu inceleyebilir, sağ taraftan istif şeklini değiştirerek anlık mukavemet farkını gözlemleyebilirsiniz:")
+    with col_mat_sel:
+        current_idx_main = STACK_OPTIONS.index(st.session_state["stacking_pattern_state"])
+        st.selectbox(
+            "🔄 İstif Deseni Değiştir:",
+            STACK_OPTIONS,
+            index=current_idx_main,
+            key="main_pattern_input",
+            on_change=update_pattern_from_main
+        )
     
     table_rows = []
     for item in board_evaluations:
-        status_text = f"✅ UYGUN ({item['safety_margin']:.2f}x)" if item["is_safe"] else f"❌ YETERSİZ ({item['safety_margin']:.2f}x)"
-        table_rows.append({
-            "Mukavva Tipi": item["key"],
-            "Kalınlık (mm)": item["caliper"],
-            "Mevcut ECT (kN/m)": item["ect"],
-            "Gereken Min. ECT (kN/m)": round(item["req_min_ect"], 2),
-            "Sağlanan BCT (kgf)": round(item["actual_bct_kgf"], 1),
-            "Hedef BCT (kgf)": round(item["target_required_bct_kgf"], 1),
-            "Durum": status_text
-        })
-    
-# Mukavva Karşılaştırma ve Reçete Tablosu
-    st.subheader("📋 Mukavva Kalitelerinin Hedef Mukavemete Uygunluk Matrisi")
-    
-    table_rows = []
-    for item in board_evaluations:
-        # Renk ve Durum Ayrımı
         if item["key"] == recommended_board_key and item["is_safe"]:
-            status_text = f"🏆 EN UYGUN / OPTİMUM ({item['safety_margin']:.2f}x)"
+            status_text = f"🏆 EN UYGUN ({item['safety_margin']:.2f}x)"
             status_type = "optimum"
         elif not item["is_safe"]:
-            status_text = f"❌ YETERSİZ / RİSKLİ ({item['safety_margin']:.2f}x)"
+            status_text = f"❌ YETERSİZ ({item['safety_margin']:.2f}x)"
             status_type = "weak"
         elif item["safety_margin"] >= 2.0:
-            status_text = f"🛡️ AŞIRI GÜÇLÜ / YÜKSEK MALİYET ({item['safety_margin']:.2f}x)"
+            status_text = f"🛡️ AŞIRI GÜÇLÜ ({item['safety_margin']:.2f}x)"
             status_type = "overkill"
         else:
             status_text = f"✅ UYGUN ({item['safety_margin']:.2f}x)"
@@ -367,35 +375,30 @@ with tab1:
             "Sağlanan BCT (kgf)": f"{item['actual_bct_kgf']:.1f}",
             "Hedef BCT (kgf)": f"{item['target_required_bct_kgf']:.1f}",
             "Durum": status_text,
-            "_status_type": status_type  # Stil fonksiyonu için gizli sütun
+            "_status_type": status_type
         })
     
     df_results = pd.DataFrame(table_rows)
 
-    # Hücre ve Satır Renklendirme Stili (Pandas Styler)
     def highlight_status(row):
         st_type = row["_status_type"]
         styles = [''] * len(row)
-        
-        # Durum sütununun indeksi
         durum_idx = df_results.columns.get_loc("Durum")
         
         if st_type == "optimum":
-            styles[durum_idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;' # Açık Yeşil
+            styles[durum_idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
         elif st_type == "weak":
-            styles[durum_idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;' # Açık Kırmızı
+            styles[durum_idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
         elif st_type == "overkill":
-            styles[durum_idx] = 'background-color: #cce5ff; color: #004085; font-weight: bold;' # Açık Mavi
+            styles[durum_idx] = 'background-color: #cce5ff; color: #004085; font-weight: bold;'
         else:
             styles[durum_idx] = 'background-color: #e2e3e5; color: #383d41;'
             
         return styles
 
-    # _status_type sütununu ekrandan gizleyerek tabloyu yazdır
     styled_df = df_results.style.apply(highlight_status, axis=1).hide(subset=["_status_type"], axis="columns")
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
-    
-    # Emniyet Faktörü Detayları
+
     with st.expander("🔍 Çevresel ve Lojistik Yorulma Faktörü (Sf) Ayrışımı"):
         st.markdown(f"""
         * **Sıcaklık Rejim Kaybı ($T_{{env}}$):** `x{temp_f:.2f}` ({selected_env['desc']})
@@ -460,7 +463,6 @@ with tab3:
         
     pallet_total_boxes = total_pallets_in_v * total_boxes_pallet
 
-    # Dökme Hesap
     loose_nx1 = int(v_info["length"] // box_out_l) * int(v_info["width"] // box_out_w) * int(v_info["height"] // box_out_h)
     loose_nx2 = int(v_info["length"] // box_out_w) * int(v_info["width"] // box_out_l) * int(v_info["height"] // box_out_h)
     max_loose_vol_boxes = max(loose_nx1, loose_nx2)
