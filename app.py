@@ -1,5 +1,5 @@
 """
-Gıda Ambalajı Koli, Palet ve Araç/Konteyner Yükleme Optimizasyonu
+Gıda Ambalajı Koli, Palet, Konteyner ve Sıcaklık/Soğuk Zincir Mukavemet Optimizatörü
 Platform: Python + Streamlit + Plotly 2D/3D
 """
 
@@ -7,12 +7,11 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 import math
 
 # Sayfa Yapılandırması
 st.set_page_config(
-    page_title="Gıda Koli, Palet & Konteyner Optimizatörü",
+    page_title="Gıda Koli, Palet & Lojistik Optimizatörü",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -27,48 +26,99 @@ BOARD_DATABASE = {
     "Ağır Hizmet - AAC Dalga (Triplex - 10.0 mm)": {"caliper": 10.0, "ect": 12.5, "grammage": 950, "flute": "AAC"}
 }
 
-# Lojistik Araç & Konteyner Standart Ölçüleri (İç Ölçüler: mm, Taşıma Kapasitesi: kg)
-VEHICLE_DATABASE = {
-    "Standart Tır (13.60 m Tenteli / Mega)": {
-        "length": 13600, "width": 2480, "height": 2700, "max_payload_kg": 24000, "euro_pallets": 33, "std_pallets": 26, "type": "Kara Yolu"
+# Sıcaklık & Depolama Rejimi Veritabanı (ASTM D4169 / FEFCO Standartları)
+STORAGE_ENVIRONMENTS = {
+    "Oda Sıcaklığı (İklimlendirme Yok / Değişken Nem & Sıcaklık)": {
+        "temp_desc": "Mevsimsel Değişken (15°C - 35°C)",
+        "base_temp_factor": 1.25,
+        "default_rh": 70,
+        "desc": "Yaz sıcağı, gece-gündüz yoğuşması ve kontrolsüz bağıl nem riski."
     },
-    "Kırkayak / 10 Teker Kamyon (8.20 m)": {
-        "length": 8200, "width": 2450, "height": 2600, "max_payload_kg": 16000, "euro_pallets": 20, "std_pallets": 16, "type": "Kara Yolu"
+    "+20°C Kontrollü Ortam (Klimalı Kuru Gıda Deposu)": {
+        "temp_desc": "+18°C / +22°C Sabit",
+        "base_temp_factor": 1.00,
+        "default_rh": 55,
+        "desc": "Stabil nem ve sıcaklık. Koli mukavemet kaybı minimum düzeydedir."
     },
-    "6 Teker / Küçük Kamyon (6.20 m)": {
-        "length": 6200, "width": 2400, "height": 2400, "max_payload_kg": 8000, "euro_pallets": 15, "std_pallets": 12, "type": "Kara Yolu"
+    "+4°C Soğuk Hava Deposu (Taze / Şarküteri / Süt / Meyve-Sebze)": {
+        "temp_desc": "+2°C / +6°C Soğuk Muhafaza",
+        "base_temp_factor": 1.55,
+        "default_rh": 85,
+        "desc": "Yüksek bağıl nem ve evaporatör sirkülasyonu nedeniyle liflerde %35-50 yumuşama."
     },
-    "20' Standart Konteyner (20ft DC)": {
-        "length": 5898, "width": 2352, "height": 2393, "max_payload_kg": 21800, "euro_pallets": 11, "std_pallets": 10, "type": "Deniz Yolu"
-    },
-    "40' Standart Konteyner (40ft DC)": {
-        "length": 12032, "width": 2352, "height": 2393, "max_payload_kg": 26680, "euro_pallets": 25, "std_pallets": 21, "type": "Deniz Yolu"
-    },
-    "40' High Cube Konteyner (40ft HC)": {
-        "length": 12032, "width": 2352, "height": 2698, "max_payload_kg": 26500, "euro_pallets": 25, "std_pallets": 21, "type": "Deniz Yolu"
+    "-18°C Donuk Muhafaza (Donuk Gıda / Deep Freeze)": {
+        "temp_desc": "-18°C / -22°C Donuk Zincir",
+        "base_temp_factor": 1.35,
+        "default_rh": 90,
+        "desc": "Düşük sıcaklıkta koli gevrekliği artar; yükleme/boşaltma sırasındaki terleme (yoğuşma) ekstra risk oluşturur."
     }
 }
 
-# --- YARDIMCI VE HESAPLAMA FONKSİYONLARI ---
+# Lojistik Araç & Konteyner Standart Ölçüleri
+VEHICLE_DATABASE = {
+    "Standart Tır (13.60 m Tenteli / Mega)": {
+        "length": 13600, "width": 2480, "height": 2700, "max_payload_kg": 24000, "euro_pallets": 33, "std_pallets": 26
+    },
+    "Kırkayak / 10 Teker Kamyon (8.20 m)": {
+        "length": 8200, "width": 2450, "height": 2600, "max_payload_kg": 16000, "euro_pallets": 20, "std_pallets": 16
+    },
+    "6 Teker / Küçük Kamyon (6.20 m)": {
+        "length": 6200, "width": 2400, "height": 2400, "max_payload_kg": 8000, "euro_pallets": 15, "std_pallets": 12
+    },
+    "20' Standart Konteyner (20ft DC)": {
+        "length": 5898, "width": 2352, "height": 2393, "max_payload_kg": 21800, "euro_pallets": 11, "std_pallets": 10
+    },
+    "40' Standart Konteyner (40ft DC)": {
+        "length": 12032, "width": 2352, "height": 2393, "max_payload_kg": 26680, "euro_pallets": 25, "std_pallets": 21
+    },
+    "40' High Cube Konteyner (40ft HC)": {
+        "length": 12032, "width": 2352, "height": 2698, "max_payload_kg": 26500, "euro_pallets": 25, "std_pallets": 21
+    }
+}
+
+# --- HESAPLAMA FONKSİYONLARI ---
 
 def calculate_mckee_bct(ect_kn_m, caliper_mm, perimeter_mm):
     bct_n = 5.87 * ect_kn_m * math.sqrt(caliper_mm * perimeter_mm)
     bct_kgf = bct_n / 9.80665
     return bct_n, bct_kgf
 
-def calculate_environmental_safety_factor(humidity_rh, storage_days, stacking_pattern, overhang):
-    h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.35 if humidity_rh <= 75 else (1.65 if humidity_rh <= 85 else 2.10)))
-    t_factor = 1.0 if storage_days <= 10 else (1.25 if storage_days <= 30 else (1.45 if storage_days <= 90 else (1.60 if storage_days <= 180 else 1.85)))
+def calculate_environmental_safety_factor(temp_env_factor, humidity_rh, storage_days, stacking_pattern, overhang):
+    # Nem Katsayısı (Hf)
+    if humidity_rh <= 50:
+        h_factor = 1.0
+    elif humidity_rh <= 65:
+        h_factor = 1.15
+    elif humidity_rh <= 75:
+        h_factor = 1.30
+    elif humidity_rh <= 85:
+        h_factor = 1.55
+    else:
+        h_factor = 1.95
+
+    # Zaman Yorulması (Tf)
+    if storage_days <= 10:
+        t_factor = 1.0
+    elif storage_days <= 30:
+        t_factor = 1.20
+    elif storage_days <= 90:
+        t_factor = 1.40
+    elif storage_days <= 180:
+        t_factor = 1.55
+    else:
+        t_factor = 1.75
+
     p_factor = 1.0 if "Kolon" in stacking_pattern else 1.45
     o_factor = 1.30 if overhang else 1.0
-    total_sf = h_factor * t_factor * p_factor * o_factor
-    return total_sf, h_factor, t_factor, p_factor, o_factor
+
+    # Toplam Emniyet Faktörü: Sıcaklık x Nem x Süre x İstif x Taşma
+    total_sf = temp_env_factor * h_factor * t_factor * p_factor * o_factor
+    return total_sf, temp_env_factor, h_factor, t_factor, p_factor, o_factor
 
 def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
-    """Palet tabanına koli dizilim alternatiflerini (Düz Boyuna, Düz Enine ve Hibrit Kilitli) hesaplar."""
     patterns = []
     
-    # 1. Düz Boyuna (Columnar L)
+    # 1. Düz Boyuna
     nx1 = int(pallet_l // box_l)
     ny1 = int(pallet_w // box_w)
     c1 = nx1 * ny1
@@ -82,7 +132,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
             "desc": f"{nx1} adet boyuna x {ny1} adet enine"
         })
 
-    # 2. Düz Enine (Columnar W - 90 Derece)
+    # 2. Düz Enine (90°)
     nx2 = int(pallet_l // box_w)
     ny2 = int(pallet_w // box_l)
     c2 = nx2 * ny2
@@ -96,7 +146,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
             "desc": f"{nx2} adet enine x {ny2} adet boyuna"
         })
 
-    # 3. Hibrit / Kilitli Blok Dizilim (L / T Blok Kombinasyonu)
+    # 3. Hibrit Blok
     best_hybrid = None
     max_h_count = 0
     for split_x in range(1, int(pallet_l // box_l) + 1):
@@ -122,21 +172,16 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
     if best_hybrid and best_hybrid["count"] > max(c1, c2):
         patterns.append(best_hybrid)
 
-    # Sıralama: En yüksek koli adedi ve verimliliğe göre
     patterns.sort(key=lambda x: (x["count"], x["efficiency"]), reverse=True)
     return patterns
 
 def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
-    """Seçilen dizilim desenini Plotly 2D üzerinde çizdirir."""
     fig = go.Figure()
-    
-    # Palet Tabanı
     fig.add_shape(type="rect", x0=0, y0=0, x1=pallet_l, y1=pallet_w,
                   line=dict(color="#8c564b", width=3), fillcolor="#d7ccc8", opacity=0.4)
     
     boxes_coords = []
     p_type = pattern["type"]
-    
     if p_type == "align_l":
         for i in range(pattern["nx"]):
             for j in range(pattern["ny"]):
@@ -148,17 +193,14 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
     elif p_type == "hybrid":
         s_x, ny1 = pattern["p1"]
         nx2, ny2 = pattern["p2"]
-        # Bölüm 1
         for i in range(s_x):
             for j in range(ny1):
                 boxes_coords.append((i * box_l, j * box_w, box_l, box_w))
-        # Bölüm 2
         offset_x = s_x * box_l
         for i in range(nx2):
             for j in range(ny2):
                 boxes_coords.append((offset_x + (i * box_w), j * box_l, box_w, box_l))
 
-    # Kutuları ekle
     for idx, (bx, by, bw, bh) in enumerate(boxes_coords):
         fig.add_shape(type="rect", x0=bx, y0=by, x1=bx+bw, y1=by+bh,
                       line=dict(color="#1f77b4", width=1.5), fillcolor="#6baed6", opacity=0.7)
@@ -166,7 +208,7 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
                            showarrow=False, font=dict(size=10, color="white"))
 
     fig.update_layout(
-        title=f"Palet Kat Dizilimi ({pattern['count']} Koli/Kat - Taban Verimi: %{pattern['efficiency']:.1f})",
+        title=f"Palet Kat Dizilimi ({pattern['count']} Koli/Kat - Doluluk: %{pattern['efficiency']:.1f})",
         xaxis=dict(title="Palet Boyu (mm)", range=[-50, pallet_l + 50], scaleratio=1),
         yaxis=dict(title="Palet Eni (mm)", range=[-50, pallet_w + 50], scaleratio=1),
         width=580, height=420, margin=dict(l=20, r=20, t=40, b=20)
@@ -175,10 +217,9 @@ def draw_2d_pallet_layout(pallet_l, pallet_w, box_l, box_w, pattern):
 
 # --- STREAMLIT ARAYÜZÜ ---
 
-st.title("📦 Gıda Koli, Palet ve Konteyner Yükleme Optimizatörü")
-st.markdown("Birincil gıda ambalajından başlayarak **koli boyutunu**, **palet taban dizilim desenlerini**, **BCT mukavemetini** ve **araç yükleme stratejilerini (Paletli vs. Dökme)** simüle edin.")
+st.title("📦 Gıda Koli, Palet, Soğuk Zincir & Yükleme Optimizatörü")
+st.markdown("Gıda ürünlerinin birincil ambalajından başlayarak **koli ölçülerini**, **depolama sıcaklık rejimlerini (+20°C, +4°C, -18°C)**, **palet dizilimlerini** ve **araç yükleme analizini** simüle edin.")
 
-# SIDEBAR GİRDİLERİ
 with st.sidebar:
     st.header("1. Birincil Ürün Ölçüleri")
     p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=120.0, step=5.0)
@@ -186,27 +227,31 @@ with st.sidebar:
     p_height = st.number_input("Ürün Yüksekliği (Z - mm)", min_value=10.0, value=150.0, step=5.0)
     p_weight = st.number_input("Ürün Brüt Ağırlığı (g)", min_value=1.0, value=450.0, step=10.0)
 
-    st.header("2. Koli İçi Paket Matrisi")
+    st.header("2. Koli İçi Paket Dizilimi")
     nx = st.number_input("X Yönünde Ürün", min_value=1, value=4, step=1)
     ny = st.number_input("Y Yönünde Ürün", min_value=1, value=3, step=1)
     nz = st.number_input("Z Yönünde Kat", min_value=1, value=2, step=1)
     total_units_in_box = int(nx * ny * nz)
     st.info(f"Kolideki Toplam Ürün: **{total_units_in_box} Adet**")
 
-    st.header("3. Mukavva & Lojistik")
+    st.header("3. Depolama Sıcaklığı & Çevre Rejimi")
+    env_choice = st.selectbox("Depolama Koşulu / Sıcaklık", list(STORAGE_ENVIRONMENTS.keys()), index=0)
+    selected_env = STORAGE_ENVIRONMENTS[env_choice]
+    
+    humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, selected_env["default_rh"], step=5)
+    storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
+    overhang = st.checkbox("Paletten Taşma Payı Var (Overhang)", value=False)
+
+    st.header("4. Mukavva & Lojistik")
     board_choice = st.selectbox("Mukavva Tipi", list(BOARD_DATABASE.keys()), index=3)
     pallet_choice = st.selectbox("Palet Tipi", ["Euro Palet (1200 x 800 mm)", "Standart / Sanayi Paleti (1200 x 1000 mm)"])
     pallet_dim = (1200, 800) if "Euro" in pallet_choice else (1200, 1000)
     max_pallet_h = st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=1750, step=50)
 
-    st.header("4. Taşıma / Konteyner Aracı")
-    vehicle_choice = st.selectbox("Lojistik Aracı Seçin", list(VEHICLE_DATABASE.keys()))
+    st.header("5. Taşıma / Konteyner Aracı")
+    vehicle_choice = st.selectbox("Lojistik Aracı", list(VEHICLE_DATABASE.keys()))
 
-    st.header("5. Çevre & Yorulma Faktörleri")
-    humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, 75, step=5)
-    storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
-
-# --- MATEMATİKSEL HESAPLAMALAR ---
+# --- HESAPLAMALAR ---
 
 board = BOARD_DATABASE[board_choice]
 v_info = VEHICLE_DATABASE[vehicle_choice]
@@ -231,11 +276,15 @@ gross_box_kg = net_contents_kg + tare_box_kg
 patterns = calculate_pallet_patterns(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w)
 
 # Kat sayısı
-usable_h = max_pallet_h - 145 # 145mm palet tahtası
+usable_h = max_pallet_h - 145
 layers_per_pallet = int(usable_h // box_out_h)
 
-# TABLAR HALİNDE MODÜLLER
-tab1, tab2, tab3 = st.tabs(["📦 1. Koli & Palet Dizilim Optimizasyonu", "🚛 2. Araç & Konteyner Yükleme (Paletli vs. Dökme)", "🔬 3. BCT & Mukavemet Detayları"])
+# TABLAR
+tab1, tab2, tab3 = st.tabs([
+    "📦 1. Koli & Palet Dizilimi",
+    "❄️ 2. Depolama Koşulları & Mukavemet (BCT)",
+    "🚛 3. Araç & Konteyner Yükleme (Paletli vs. Dökme)"
+])
 
 # === TAB 1: Koli & Palet Dizilimi ===
 with tab1:
@@ -246,39 +295,96 @@ with tab1:
     m4.metric("Koli İçi Boşluk Oranı", f"%{100 - ((p_length*p_width*p_height*total_units_in_box)/(box_in_l*box_in_w*box_in_h)*100):.1f}")
 
     st.subheader("🎯 Palet Taban Dizilim Alternatifleri")
-    
     col_pat_left, col_pat_right = st.columns([1, 1.2])
     
     with col_pat_left:
-        st.write("Aşağıdaki dizilim desenlerinden birini seçerek simülasyonu güncelleyebilirsiniz:")
         pattern_names = [f"{p['name']} ({p['count']} Koli/Kat - %{p['efficiency']:.1f} Verim)" for p in patterns]
         selected_pat_idx = st.radio("Dizilim Şekli:", range(len(patterns)), format_func=lambda x: pattern_names[x])
         selected_pattern = patterns[selected_pat_idx]
 
         total_boxes_pallet = selected_pattern["count"] * layers_per_pallet
-        total_pallet_gross = (total_boxes_pallet * gross_box_kg) + 25 # 25kg palet tahtası
+        total_pallet_gross = (total_boxes_pallet * gross_box_kg) + 25
 
         st.info(f"""
         **Seçili Dizilim Performansı:**
         * **Kat Başına Koli:** `{selected_pattern['count']} Adet` ({selected_pattern['desc']})
         * **1 Paletteki Toplam Koli:** `{total_boxes_pallet} Adet` ({total_boxes_pallet * total_units_in_box} Ürün)
         * **1 Palet Brüt Ağırlığı:** `{total_pallet_gross:.1f} kg`
-        * **Palet Taban Alanı Verimliliği:** `%{selected_pattern['efficiency']:.1f}`
+        * **Taban Doluluk Verimi:** `%{selected_pattern['efficiency']:.1f}`
         """)
 
     with col_pat_right:
         fig_2d = draw_2d_pallet_layout(pallet_dim[0], pallet_dim[1], box_out_l, box_out_w, selected_pattern)
         st.plotly_chart(fig_2d, use_container_width=True)
 
-# === TAB 2: Araç & Konteyner Yükleme ===
+# === TAB 2: Depolama & BCT Mukavemet ===
 with tab2:
+    st.subheader(f"🌡️ Depolama Rejimi Değerlendirmesi: {env_choice}")
+    st.caption(f"ℹ️ {selected_env['desc']}")
+
+    bct_n, bct_kgf = calculate_mckee_bct(board["ect"], board["caliper"], box_perimeter)
+    stack_type = "Kolon" if "Kolon" in selected_pattern["name"] else "Kilitli"
+    
+    sf, tfactor, hf, tf, pf, of = calculate_environmental_safety_factor(
+        selected_env["base_temp_factor"], humidity_rh, storage_days, stack_type, overhang
+    )
+    
+    bottom_box_load = gross_box_kg * (layers_per_pallet - 1)
+    req_bct = bottom_box_load * sf
+    safety_ratio = bct_kgf / req_bct if req_bct > 0 else 999
+
+    if safety_ratio >= 1.0:
+        st.success(f"✅ **MUKAVEMET UYGUN:** Seçilen koli kalitesi bu depolama rejiminde ({selected_env['temp_desc']}) istif yükünü taşır. (Güvenlik Payı: {safety_ratio:.2f}x)")
+    else:
+        st.error(f"⚠️ **EZİLME RİSKİ YÜKSEK:** {selected_env['temp_desc']} koşullarında lif zayıflaması nedeniyle gereken BCT ({req_bct:.1f} kgf), koli direncinden ({bct_kgf:.1f} kgf) büyüktür! Mukavva kalitesini yükseltiniz (Örn: Çift Dalga BC veya Triplex).")
+
+    col_bct1, col_bct2 = st.columns(2)
+    with col_bct1:
+        st.markdown(f"""
+        **Mukavemet Değerleri:**
+        * **Koli BCT Ezilme Dayanımı (McKee):** `{bct_kgf:.1f} kgf` (`{bct_n:.0f} N`)
+        * **En Alttaki Koliye Binen Statik Yük:** `{bottom_box_load:.1f} kgf`
+        * **Gereken Minimum Dinamik BCT:** `{req_bct:.1f} kgf`
+        * **Mukavemet Güvenlik Oranı:** `{safety_ratio:.2f}x`
+        """)
+    with col_bct2:
+        st.markdown(f"""
+        **Çevresel Emniyet Faktörü ($S_f$) Bileşenleri:**
+        * **Toplam Emniyet Katsayısı ($S_f$):** `{sf:.2f}`
+        * *Sıcaklık Rejimi Kaybı ($T_{{env}}$):* x{tfactor:.2f}
+        * *Bağıl Nem Kaybı ($H_f$ - %{humidity_rh} RH):* x{hf:.2f}
+        * *Depolama Süresi Yorulması ($T_f$ - {storage_days} Gün):* x{tf:.2f}
+        * *İstif Deseni Kaybı ($P_f$):* x{pf:.2f}
+        * *Taşma Payı Kaybı ($O_f$):* x{of:.2f}
+        """)
+
+    st.divider()
+    st.subheader("📋 Farklı Depolama Koşullarında Bu Kolinin Performans Kıyaslaması")
+    env_comparison = []
+    for env_name, env_data in STORAGE_ENVIRONMENTS.items():
+        temp_sf, _, _, _, _, _ = calculate_environmental_safety_factor(
+            env_data["base_temp_factor"], env_data["default_rh"], storage_days, stack_type, overhang
+        )
+        temp_req_bct = bottom_box_load * temp_sf
+        status = "Güvenli ✅" if bct_kgf >= temp_req_bct else "Yetersiz / Ezilme Riski ❌"
+        env_comparison.append({
+            "Depolama Ortamı": env_name,
+            "Rejim / Sıcaklık": env_data["temp_desc"],
+            "Tipik Nem (% RH)": f"%{env_data['default_rh']}",
+            "Toplam Katsayı (Sf)": round(temp_sf, 2),
+            "Gereken BCT (kgf)": round(temp_req_bct, 1),
+            "Koli Dayanımı (kgf)": round(bct_kgf, 1),
+            "Sonuç": status
+        })
+    st.table(pd.DataFrame(env_comparison))
+
+# === TAB 3: Araç & Konteyner Yükleme ===
+with tab3:
     st.subheader(f"🚚 Taşıma Simülasyonu: {vehicle_choice}")
     
-    # 1. Paletli Yükleme Hesabı
     is_euro = "Euro" in pallet_choice
     floor_pallets = v_info["euro_pallets"] if is_euro else v_info["std_pallets"]
     
-    # Çift kat palet istiflenebilir mi?
     pallet_full_h = 145 + (layers_per_pallet * box_out_h)
     double_stack = (pallet_full_h * 2) <= v_info["height"]
     total_pallets_in_v = floor_pallets * (2 if double_stack else 1)
@@ -293,7 +399,7 @@ with tab2:
         
     pallet_total_boxes = total_pallets_in_v * total_boxes_pallet
 
-    # 2. Dökme (Floor Loaded) Yükleme Hesabı
+    # Dökme Hesap
     loose_nx1 = int(v_info["length"] // box_out_l) * int(v_info["width"] // box_out_w) * int(v_info["height"] // box_out_h)
     loose_nx2 = int(v_info["length"] // box_out_w) * int(v_info["width"] // box_out_l) * int(v_info["height"] // box_out_h)
     max_loose_vol_boxes = max(loose_nx1, loose_nx2)
@@ -307,20 +413,17 @@ with tab2:
         total_loose_boxes = max_loose_vol_boxes
         loose_limit_reason = "Konteyner/Araç Hacim Sınırı"
 
-    # Karşılaştırma Metrikleri
     c1, c2, c3 = st.columns(3)
     c1.metric("Paletli Toplam Koli", f"{pallet_total_boxes:,} Adet", f"{total_pallets_in_v} Palet ({'Çift Kat' if double_stack else 'Tek Kat'})")
-    c2.metric("Dökme Toplam Koli", f"{total_loose_boxes:,} Adet", f"+%{((total_loose_boxes - pallet_total_boxes)/pallet_total_boxes)*100:.1f} Daha Fazla Koli")
+    c2.metric("Dökme Toplam Koli", f"{total_loose_boxes:,} Adet", f"+%{((total_loose_boxes - pallet_total_boxes)/pallet_total_boxes)*100:.1f} Daha Fazla")
     
-    # En Uygun Yöntem Tavsiyesi
     extra_capacity_percent = ((total_loose_boxes - pallet_total_boxes) / pallet_total_boxes) * 100
     with c3:
         if "Konteyner" in vehicle_choice and extra_capacity_percent > 20:
-            st.success("💡 **ÖNERİLEN: DÖKME YÜKLEME**\nDenizyolu konteyner navlun maliyetini minimize etmek için dökme yükleme %20+ daha avantajlıdır.")
+            st.success("💡 **ÖNERİLEN: DÖKME YÜKLEME**\nDenizyolu navlun maliyetini minimize etmek için dökme yükleme %20+ daha avantajlıdır.")
         else:
-            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nForklift ile hızlı yükleme/boşaltma ve gıda ürünlerinde koli deformasyonunu önlemek için paletli taşıma önerilir.")
+            st.success("💡 **ÖNERİLEN: PALETLİ YÜKLEME**\nForklift ile hızlı boşaltma ve soğuk zincir/gıda ürünlerinde deformasyonu önlemek için paletli taşıma önerilir.")
 
-    # Detaylı Kıyaslama Tablosu
     v_comp = pd.DataFrame([
         {
             "Yükleme Yöntemi": "Paletli Taşıma",
@@ -342,35 +445,3 @@ with tab2:
         }
     ])
     st.table(v_comp)
-
-# === TAB 3: BCT & Mukavemet ===
-with tab3:
-    st.subheader("🔬 Koli Dayanımı & McKee Formülü")
-    
-    bct_n, bct_kgf = calculate_mckee_bct(board["ect"], board["caliper"], box_perimeter)
-    stack_type = "Kolon" if "Kolon" in selected_pattern["name"] else "Kilitli"
-    sf, hf, tf, pf, of = calculate_environmental_safety_factor(humidity_rh, storage_days, stack_type, False)
-    
-    bottom_box_load = gross_box_kg * (layers_per_pallet - 1)
-    req_bct = bottom_box_load * sf
-    safety_ratio = bct_kgf / req_bct if req_bct > 0 else 999
-
-    if safety_ratio >= 1.0:
-        st.success(f"✅ Mukavemet Yeterli! (Güvenlik Payı: {safety_ratio:.2f}x)")
-    else:
-        st.error(f"⚠️ Ezilme Riski! Gereken BCT ({req_bct:.1f} kgf), Sağlanan BCT'den ({bct_kgf:.1f} kgf) yüksek.")
-
-    col_bct1, col_bct2 = st.columns(2)
-    with col_bct1:
-        st.markdown(f"""
-        * **Koli Ezilme Dayanımı (BCT):** `{bct_kgf:.1f} kgf` (`{bct_n:.0f} N`)
-        * **En Alt Koliye Gelen Statik Yük:** `{bottom_box_load:.1f} kgf`
-        * **Gereken Minimum Dinamik BCT:** `{req_bct:.1f} kgf`
-        """)
-    with col_bct2:
-        st.markdown(f"""
-        * **Toplam Emniyet Katsayısı ($S_f$):** `{sf:.2f}`
-          * *Nem Katsayısı ($H_f$):* x{hf:.2f}
-          * *Zaman Yorulması ($T_f$):* x{tf:.2f}
-          * *Dizilim Kaybı ($P_f$):* x{pf:.2f}
-        """)
