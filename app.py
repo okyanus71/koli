@@ -113,7 +113,7 @@ def sync_height_main(): st.session_state["max_pallet_h_state"] = st.session_stat
 def sync_vehicle_sb(): st.session_state["vehicle_choice_state"] = st.session_state["sb_vehicle"]
 def sync_vehicle_main(): st.session_state["vehicle_choice_state"] = st.session_state["main_vehicle"]
 
-# --- HESAPLAMA VE 2B/3B ÇİZİMLER ---
+# --- HESAPLAMA VE ÇİZİMLER ---
 
 def calculate_environmental_safety_factor(temp_factor, humidity_rh, storage_days, stacking_pattern, overhang):
     h_factor = 1.0 if humidity_rh <= 50 else (1.15 if humidity_rh <= 65 else (1.30 if humidity_rh <= 75 else (1.55 if humidity_rh <= 85 else 1.95)))
@@ -168,6 +168,8 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
         patterns.append(best_h)
     patterns.sort(key=lambda x: (x["count"], x["efficiency"]), reverse=True)
     return patterns
+
+# --- PLOTLY EKRAN ÇİZİM FONKSİYONLARI ---
 
 def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
@@ -331,8 +333,16 @@ def pdf_draw_pallet_3d_iso(pallet_l, pallet_w, box_h, layers, coords, width=255,
         c_s1 = colors.HexColor('#2171b5') if l%2==0 else colors.HexColor('#41ab5d')
         c_s2 = colors.HexColor('#1f77b4') if l%2==0 else colors.HexColor('#238b45')
         for bx, by, bw, bh in coords:
-            v = [proj(bx, by, z0), proj(bx+bw, by, z0), proj(bx+bw, by+bh, z0), proj(bx, by+bh, z0),
-                 proj(bx, by, z0+box_h), proj(bx+bw, by+box_h), proj(bx+bw, by+bh, z0+box_h), proj(bx, by+bh, z0+box_h)]
+            v = [
+                proj(bx, by, z0), 
+                proj(bx+bw, by, z0), 
+                proj(bx+bw, by+bh, z0), 
+                proj(bx, by+bh, z0),
+                proj(bx, by, z0+box_h), 
+                proj(bx+bw, by, z0+box_h), 
+                proj(bx+bw, by+bh, z0+box_h), 
+                proj(bx, by+bh, z0+box_h)
+            ]
             d.add(Polygon([v[4][0], v[4][1], v[5][0], v[5][1], v[6][0], v[6][1], v[7][0], v[7][1]], fillColor=c_top, strokeColor=colors.HexColor('#222222'), strokeWidth=0.4))
             d.add(Polygon([v[1][0], v[1][1], v[2][0], v[2][1], v[6][0], v[6][1], v[5][0], v[5][1]], fillColor=c_s1, strokeColor=colors.HexColor('#222222'), strokeWidth=0.4))
             d.add(Polygon([v[0][0], v[0][1], v[1][0], v[1][1], v[5][0], v[5][1], v[4][0], v[4][1]], fillColor=c_s2, strokeColor=colors.HexColor('#222222'), strokeWidth=0.4))
