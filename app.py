@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Sıfır Ek Bağımlılık & Türkçe Destekli)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Garantili Türkçe Font Motoru)
 """
 
 import streamlit as st
@@ -12,6 +12,7 @@ import math
 import io
 import os
 import re
+import urllib.request
 from datetime import datetime
 
 # PDF & Vektörel Çizim Kütüphaneleri
@@ -19,7 +20,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.graphics.shapes import Drawing, Rect, String, Line
+from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -30,28 +31,42 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MATPLOTLIB GEREKTİRMEYEN GÜVENLİ UNICODE TÜRKÇE FONT YÜKLEYİCİ ---
-FONT_NAME = "Helvetica"
-FONT_BOLD = "Helvetica-Bold"
-
-candidate_fonts = [
-    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-    ("/usr/share/fonts/truetype/freefont/FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
-    ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf"),
-    ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf")
-]
-
-for reg_path, bold_path in candidate_fonts:
-    if os.path.exists(reg_path) and os.path.exists(bold_path):
+# --- GARANTİLİ TÜRKÇE FONT YÜKLEME MOTORU ---
+@st.cache_resource
+def setup_turkish_pdf_fonts():
+    """Streamlit Cloud ve yerel ortamda Türkçe karakterleri %100 destekleyen TTF fontlarını yükler"""
+    font_reg_path = "DejaVuSans.ttf"
+    font_bold_path = "DejaVuSans-Bold.ttf"
+    
+    # 1. Yerel fontlar yoksa resmi güvenli depodan indir
+    urls = {
+        font_reg_path: "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/resources/DejaVuSans.ttf",
+        font_bold_path: "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/resources/DejaVuSans-Bold.ttf"
+    }
+    
+    for filename, url in urls.items():
+        if not os.path.exists(filename) or os.path.getsize(filename) < 1000:
+            try:
+                urllib.request.urlretrieve(url, filename)
+            except Exception:
+                pass
+                
+    # 2. İndirilen veya sistemdeki fontu ReportLab'e kaydet
+    f_name = "Helvetica"
+    f_bold = "Helvetica-Bold"
+    
+    if os.path.exists(font_reg_path) and os.path.exists(font_bold_path):
         try:
-            pdfmetrics.registerFont(TTFont('AppTurkishFont', reg_path))
-            pdfmetrics.registerFont(TTFont('AppTurkishFont-Bold', bold_path))
-            FONT_NAME = 'AppTurkishFont'
-            FONT_BOLD = 'AppTurkishFont-Bold'
-            break
+            pdfmetrics.registerFont(TTFont('TR_DejaVu', font_reg_path))
+            pdfmetrics.registerFont(TTFont('TR_DejaVu_Bold', font_bold_path))
+            f_name = 'TR_DejaVu'
+            f_bold = 'TR_DejaVu_Bold'
         except Exception:
             pass
+            
+    return f_name, f_bold
+
+FONT_NAME, FONT_BOLD = setup_turkish_pdf_fonts()
 
 # Mukavva Veritabanı
 BOARD_DATABASE = {
@@ -428,7 +443,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (TAM TÜRKÇE) ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info):
     buf = io.BytesIO()
@@ -443,7 +458,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements = []
     elements.append(Paragraph("GIDA AMBALAJI KOLİ MUKAVEMET VE LOJİSTİK RAPORU", title_style))
     elements.append(Paragraph("Hazırlayan: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)", author_style))
-    elements.append(Paragraph(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}", ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
+    elements.append(Paragraph(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}", ParagraphStyle('DateStyle', parent=normal_style, fontName=FONT_NAME, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 4))
 
     box_name_disp = prod_info.get('box_name', '').strip()
@@ -453,7 +468,12 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         code_str = box_code_disp if box_code_disp else "Belirtilmedi"
         id_table_data = [[Paragraph(f"<b>Koli / Ürün Adı:</b> {name_str}", normal_style), Paragraph(f"<b>Koli Stok Kodu (SKU):</b> {code_str}", normal_style)]]
         t_id = Table(id_table_data, colWidths=[270, 270])
-        t_id.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')), ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')), ('TOPPADDING', (0,0), (-1,-1), 2.5), ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)]))
+        t_id.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')),
+            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')),
+            ('TOPPADDING', (0,0), (-1,-1), 2.5),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
+        ]))
         elements.append(t_id)
         elements.append(Spacer(1, 3))
 
@@ -481,7 +501,12 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     b_out = active_eval['box_out_dims']
     rec_text = f"<b>ÖNERİLEN MUKAVVA: {active_eval['key']}</b> | Koli Dış Ölçüleri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b> | Hedef BCT: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Sağlanan BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> | Min. ECT: <b>{active_eval['req_min_ect']:.2f} kN/m</b> | Güvenlik Payı: <b>{active_eval['safety_margin']:.2f}x</b>"
     t_rec = Table([[Paragraph(rec_text, normal_style)]], colWidths=[540])
-    t_rec.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')), ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#28a745')), ('TOPPADDING', (0,0), (-1,-1), 3), ('BOTTOMPADDING', (0,0), (-1,-1), 3)]))
+    t_rec.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')),
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#28a745')),
+        ('TOPPADDING', (0,0), (-1,-1), 3),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3)
+    ]))
     elements.append(t_rec)
     elements.append(Spacer(1, 4))
 
@@ -507,7 +532,14 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
             Paragraph(f"<font color='{st_color}'><b>{status_text}</b></font>", normal_style)
         ])
     t_mat = Table(mat_rows, colWidths=[110, 45, 60, 60, 55, 55, 155])
-    t_mat.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')), ('TEXTCOLOR', (0,0), (-1,0), colors.white), ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 2), ('BOTTOMPADDING', (0,0), (-1,-1), 2)]))
+    t_mat.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2)
+    ]))
     elements.append(t_mat)
     elements.append(Spacer(1, 4))
 
@@ -564,7 +596,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Spacer(1, 4))
 
     footer_text = "Raporlama & Mühendislik: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.) | McKee Mukavemet & ASTM D4169 Standartları"
-    elements.append(Paragraph(footer_text, ParagraphStyle('FooterStyle', parent=normal_style, fontSize=6.5, textColor=colors.gray, alignment=1)))
+    elements.append(Paragraph(footer_text, ParagraphStyle('FooterStyle', parent=normal_style, fontName=FONT_NAME, fontSize=6.5, textColor=colors.gray, alignment=1)))
     doc.build(elements)
     buf.seek(0)
     return buf.getvalue()
@@ -590,7 +622,7 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
 
     elements = []
     elements.append(Paragraph("OLUKLU MUKAVVA KOLİ TEKNİK SATINALMA ŞARTNAMESİ", title_style))
-    elements.append(Paragraph(f"Doküman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}", ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
+    elements.append(Paragraph(f"Doküman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}", ParagraphStyle('DocNo', parent=normal, fontName=FONT_NAME, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 6))
 
     # 1. Genel Bilgiler
@@ -661,12 +693,11 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval):
     elements.append(Paragraph(criteria_text, normal))
     elements.append(Spacer(1, 8))
 
-    # Onay Alanı
+    # Tedarikçi Taahhüt Alanı
     t_sign = Table([
-        [Paragraph("<b>ALICI FİRMA ONAYI</b><br/>Kalite Güvence / Satınalma Birimi", normal),
-         Paragraph("<b>TEDARİKÇİ FİRMA TAAHHÜTNAMESİ</b><br/>Yukarıdaki teknik şartları eksiksiz kabul ederiz.", normal)],
-        [Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal), Paragraph("<br/><br/>İmza / Kaşe:<br/>Tarih:", normal)]
-    ], colWidths=[265, 265])
+        [Paragraph("<b>TEDARİKÇİ FİRMA TAAHHÜTNAMESİ</b><br/>Yukarıdaki teknik şartları eksiksiz kabul ederiz.", normal)],
+        [Paragraph("<br/><br/>Yetkili İmza / Kaşe:<br/>Tarih:", normal)]
+    ], colWidths=[530])
     t_sign.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#888888')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
