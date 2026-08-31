@@ -340,8 +340,61 @@ with tab1:
             "Durum": status_text
         })
     
-    st.table(pd.DataFrame(table_rows))
+# Mukavva Karşılaştırma ve Reçete Tablosu
+    st.subheader("📋 Mukavva Kalitelerinin Hedef Mukavemete Uygunluk Matrisi")
+    
+    table_rows = []
+    for item in board_evaluations:
+        # Renk ve Durum Ayrımı
+        if item["key"] == recommended_board_key and item["is_safe"]:
+            status_text = f"🏆 EN UYGUN / OPTİMUM ({item['safety_margin']:.2f}x)"
+            status_type = "optimum"
+        elif not item["is_safe"]:
+            status_text = f"❌ YETERSİZ / RİSKLİ ({item['safety_margin']:.2f}x)"
+            status_type = "weak"
+        elif item["safety_margin"] >= 2.0:
+            status_text = f"🛡️ AŞIRI GÜÇLÜ / YÜKSEK MALİYET ({item['safety_margin']:.2f}x)"
+            status_type = "overkill"
+        else:
+            status_text = f"✅ UYGUN ({item['safety_margin']:.2f}x)"
+            status_type = "safe"
 
+        table_rows.append({
+            "Mukavva Tipi": item["key"],
+            "Kalınlık (mm)": f"{item['caliper']:.1f}",
+            "Mevcut ECT (kN/m)": f"{item['ect']:.2f}",
+            "Gereken Min. ECT (kN/m)": f"{item['req_min_ect']:.2f}",
+            "Sağlanan BCT (kgf)": f"{item['actual_bct_kgf']:.1f}",
+            "Hedef BCT (kgf)": f"{item['target_required_bct_kgf']:.1f}",
+            "Durum": status_text,
+            "_status_type": status_type  # Stil fonksiyonu için gizli sütun
+        })
+    
+    df_results = pd.DataFrame(table_rows)
+
+    # Hücre ve Satır Renklendirme Stili (Pandas Styler)
+    def highlight_status(row):
+        st_type = row["_status_type"]
+        styles = [''] * len(row)
+        
+        # Durum sütununun indeksi
+        durum_idx = df_results.columns.get_loc("Durum")
+        
+        if st_type == "optimum":
+            styles[durum_idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;' # Açık Yeşil
+        elif st_type == "weak":
+            styles[durum_idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;' # Açık Kırmızı
+        elif st_type == "overkill":
+            styles[durum_idx] = 'background-color: #cce5ff; color: #004085; font-weight: bold;' # Açık Mavi
+        else:
+            styles[durum_idx] = 'background-color: #e2e3e5; color: #383d41;'
+            
+        return styles
+
+    # _status_type sütununu ekrandan gizleyerek tabloyu yazdır
+    styled_df = df_results.style.apply(highlight_status, axis=1).hide(subset=["_status_type"], axis="columns")
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    
     # Emniyet Faktörü Detayları
     with st.expander("🔍 Çevresel ve Lojistik Yorulma Faktörü (Sf) Ayrışımı"):
         st.markdown(f"""
