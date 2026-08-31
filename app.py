@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (İnteraktif Görsel Navigasyonlu)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
 """
 
 import streamlit as st
@@ -120,22 +120,6 @@ PALLET_OPTIONS = ["Euro Palet (1200 x 800 mm)", "Standart Palet (1200 x 1000 mm)
 if "active_step" not in st.session_state:
     st.session_state["active_step"] = 1
 
-if "stacking_pattern_state" not in st.session_state:
-    st.session_state["stacking_pattern_state"] = STACK_OPTIONS[0]
-if "pallet_choice_state" not in st.session_state:
-    st.session_state["pallet_choice_state"] = PALLET_OPTIONS[0]
-if "max_pallet_h_state" not in st.session_state:
-    st.session_state["max_pallet_h_state"] = 1750
-
-def sync_pattern_sb(): st.session_state["stacking_pattern_state"] = st.session_state["sb_pattern"]
-def sync_pattern_main(): st.session_state["stacking_pattern_state"] = st.session_state["main_pattern"]
-def sync_pallet_sb(): st.session_state["pallet_choice_state"] = st.session_state["sb_pallet"]
-def sync_pallet_main(): st.session_state["pallet_choice_state"] = st.session_state["main_pallet"]
-def sync_height_sb(): st.session_state["max_pallet_h_state"] = st.session_state["sb_height"]
-def sync_height_main(): st.session_state["max_pallet_h_state"] = st.session_state["main_height"]
-def sync_vehicle_sb(): st.session_state["vehicle_choice_state"] = st.session_state["sb_vehicle"]
-def sync_vehicle_main(): st.session_state["vehicle_choice_state"] = st.session_state["main_vehicle"]
-
 def set_step(step_number):
     st.session_state["active_step"] = step_number
 
@@ -199,7 +183,7 @@ def calculate_pallet_patterns(pallet_l, pallet_w, box_l, box_w):
 
 def create_box_mesh(x0, y0, z0, dx, dy, dz, color="#1f77b4", opacity=0.85):
     x = [x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0]
-    y = [y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy]
+    y = [y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy, y0]
     z = [z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz]
     i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2]
     j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
@@ -602,36 +586,26 @@ with st.sidebar:
     humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, selected_env["default_rh"], step=5)
     storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
     
-    st.selectbox("İstif Deseni", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="sb_pattern", on_change=sync_pattern_sb)
+    active_stacking = st.selectbox("İstif Deseni", STACK_OPTIONS, index=0)
     overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
 
     is_cold_storage = selected_env["is_cold"]
     available_vehicles = [k for k, v in VEHICLE_DATABASE.items() if v["cold_chain"] == is_cold_storage]
 
     st.header("4. Palet ve Taşıma Kriterleri")
-    st.selectbox("Palet Standardı", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="sb_pallet", on_change=sync_pallet_sb)
-    st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="sb_height", on_change=sync_height_sb)
+    active_pallet = st.selectbox("Palet Standardı", PALLET_OPTIONS, index=0)
+    active_max_h = st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=1750, step=50)
 
-    if st.session_state.get("vehicle_choice_state") not in available_vehicles:
-        st.session_state["vehicle_choice_state"] = available_vehicles[0]
-
-    st.selectbox(
+    active_vehicle = st.selectbox(
         "Taşıma Aracı" + (" (Frigofirik / Soğutmalı)" if is_cold_storage else " (Kuru Yük / Standart)"),
         available_vehicles,
-        index=available_vehicles.index(st.session_state["vehicle_choice_state"]),
-        key="sb_vehicle",
-        on_change=sync_vehicle_sb
+        index=0
     )
 
     st.divider()
     st.caption("© 2026 Okyanus Danışmanlık\nDr. Murat Özdemir (Gıda Müh.)")
 
 # --- AKTİF SEÇİMLER VE HESAPLAMA ---
-
-active_stacking = st.session_state["stacking_pattern_state"]
-active_pallet = st.session_state["pallet_choice_state"]
-active_max_h = st.session_state["max_pallet_h_state"]
-active_vehicle = st.session_state["vehicle_choice_state"]
 
 pallet_dim = (1200, 800) if "Euro" in active_pallet else (1200, 1000)
 
@@ -761,15 +735,6 @@ with col_head:
 with col_btn:
     st.write("")
     st.download_button(label="📥 PDF Raporunu İndir", data=pdf_bytes, file_name=pdf_file_title, mime="application/pdf", use_container_width=True)
-
-# Hızlı Kontrol Paneli
-with st.container():
-    st.markdown("##### ⚙️ Hızlı Ayar Paneli")
-    c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4 = st.columns(4)
-    with c_ctrl1: st.selectbox("Palet Standardı:", PALLET_OPTIONS, index=PALLET_OPTIONS.index(st.session_state["pallet_choice_state"]), key="main_pallet", on_change=sync_pallet_main)
-    with c_ctrl2: st.number_input("Maks. Palet Yüksekliği (mm):", min_value=500, value=st.session_state["max_pallet_h_state"], step=50, key="main_height", on_change=sync_height_main)
-    with c_ctrl3: st.selectbox("Taşıma Aracı / Konteyner:", available_vehicles, index=available_vehicles.index(st.session_state["vehicle_choice_state"]), key="main_vehicle", on_change=sync_vehicle_main)
-    with c_ctrl4: st.selectbox("İstif Deseni:", STACK_OPTIONS, index=STACK_OPTIONS.index(st.session_state["stacking_pattern_state"]), key="main_pattern", on_change=sync_pattern_main)
 
 st.divider()
 
