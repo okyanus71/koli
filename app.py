@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Şartnamede 2B ve 3B Koli Dizilimli)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Kalıcı Kaydetme, Düzenleme & Silme Entegrasyonlu)
 """
 
 import streamlit as st
@@ -10,6 +10,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import math
 import io
+import os
+import json
 import re
 from datetime import datetime
 
@@ -26,6 +28,48 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+DB_FILE = "koli_database.json"
+
+# --- KALICI VERİTABANI İŞLEMLERİ (JSON) ---
+def load_koli_database():
+    if not os.path.exists(DB_FILE):
+        default_data = {
+            "Örnek - 500g Salça Kolisi": {
+                "box_name": "500g Salça Kolisi",
+                "box_code": "KL-SL-500-01",
+                "p_length": 120.0,
+                "p_width": 80.0,
+                "p_height": 150.0,
+                "p_weight": 450.0,
+                "nx": 4,
+                "ny": 3,
+                "nz": 2,
+                "env_choice": "+4°C Soğuk Hava Deposu (Taze / Süt / Şarküteri)",
+                "humidity_rh": 85,
+                "storage_days": 60,
+                "stacking_pattern": "Kolon (Üst Üste - %100 Direnç)",
+                "overhang": False,
+                "target_bct_margin": 1.20,
+                "target_ect_margin": 1.15,
+                "pallet_choice": "Euro Palet (1200 x 800 mm)",
+                "max_pallet_h": 1750,
+                "vehicle_choice": "Frigofirik Tır (13.60 m Termokinli / Soğutmalı)",
+                "updated_at": "2026-09-03 12:00"
+            }
+        }
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_data, f, ensure_ascii=False, indent=2)
+        return default_data
+    try:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_koli_database(data):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 # Mukavva Veritabanı
 BOARD_DATABASE = {
@@ -122,16 +166,11 @@ STACK_OPTIONS = ["Kolon (Üst Üste - %100 Direnç)", "Kilitli / Çapraz (%45 Ka
 PALLET_OPTIONS = ["Euro Palet (1200 x 800 mm)", "Standart Palet (1200 x 1000 mm)"]
 
 # State Yönetimi
-if "active_step" not in st.session_state:
-    st.session_state["active_step"] = 1
-if "step2_sub_view" not in st.session_state:
-    st.session_state["step2_sub_view"] = "koli"
+if "active_step" not in st.session_state: st.session_state["active_step"] = 1
+if "step2_sub_view" not in st.session_state: st.session_state["step2_sub_view"] = "koli"
 
-def set_step(step_number):
-    st.session_state["active_step"] = step_number
-
-def set_step2_sub(sub_name):
-    st.session_state["step2_sub_view"] = sub_name
+def set_step(step_number): st.session_state["active_step"] = step_number
+def set_step2_sub(sub_name): st.session_state["step2_sub_view"] = sub_name
 
 # --- HESAPLAMA FONKSİYONLARI ---
 
@@ -368,20 +407,12 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
 # --- PDF İÇİN ÇİZİM VE GÜVENLİ METİN DÖNÜŞTÜRÜCÜSÜ ---
 
 def safe_pdf_str(text):
-    """ReportLab font motorunda siyah kutu (■) basılmasını önleyen tam ASCII/Latin eşleme"""
-    if not isinstance(text, str):
-        text = str(text)
-    mapping = {
-        'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S',
-        'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U',
-        'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
-    }
-    for k, v in mapping.items():
-        text = text.replace(k, v)
+    if not isinstance(text, str): text = str(text)
+    mapping = {'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S', 'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U', 'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'}
+    for k, v in mapping.items(): text = text.replace(k, v)
     return text
 
 def pdf_draw_box_2d(box_in_l, box_in_w, p_len, p_wid, nx, ny, width=240, height=95):
-    """Şartname için 2B Koli İçi Kat Planı"""
     d = Drawing(width, height)
     scale = min((width - 16) / box_in_l, (height - 16) / box_in_w)
     bw = box_in_l * scale
@@ -402,7 +433,6 @@ def pdf_draw_box_2d(box_in_l, box_in_w, p_len, p_wid, nx, ny, width=240, height=
     return d
 
 def pdf_draw_box_3d_iso(box_in_l, box_in_w, box_in_h, p_len, p_wid, p_h, nx, ny, nz, width=240, height=95):
-    """Şartname için 3B İzometrik Koli İçi Paketleme Şeması"""
     d = Drawing(width, height)
     iso_s = min(0.11, (height - 20) / (box_in_h + (box_in_l + box_in_w) * 0.45 * math.sin(math.radians(30)) + 30))
     ox = width / 2 - (box_in_l - box_in_w) * 0.5 * math.cos(math.radians(30)) * iso_s
@@ -417,11 +447,9 @@ def pdf_draw_box_3d_iso(box_in_l, box_in_w, box_in_h, p_len, p_wid, p_h, nx, ny,
         proj(0, 0, 0), proj(box_in_l, 0, 0), proj(box_in_l, box_in_w, 0), proj(0, box_in_w, 0),
         proj(0, 0, box_in_h), proj(box_in_l, 0, box_in_h), proj(box_in_l, box_in_w, box_in_h), proj(0, box_in_w, box_in_h)
     ]
-    # Koli tabanı
     d.add(Polygon([v_box[0][0], v_box[0][1], v_box[1][0], v_box[1][1], v_box[2][0], v_box[2][1], v_box[3][0], v_box[3][1]],
                   fillColor=colors.HexColor('#f5ede3'), strokeColor=colors.HexColor('#a1887f'), strokeWidth=0.8))
 
-    # Koli içi ürün blokları
     for k in range(nz):
         z0 = k * p_h
         c_top = colors.HexColor('#a1d99b') if k % 2 == 0 else colors.HexColor('#74c476')
@@ -445,7 +473,6 @@ def pdf_draw_box_3d_iso(box_in_l, box_in_w, box_in_h, p_len, p_wid, p_h, nx, ny,
                 d.add(Polygon([v[0][0], v[0][1], v[1][0], v[1][1], v[5][0], v[5][1], v[4][0], v[4][1]],
                               fillColor=c_s2, strokeColor=colors.HexColor('#1b4d1b'), strokeWidth=0.3))
 
-    # Koli dış tel kafes çizgileri
     d.add(Line(v_box[0][0], v_box[0][1], v_box[4][0], v_box[4][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
     d.add(Line(v_box[1][0], v_box[1][1], v_box[5][0], v_box[5][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
     d.add(Line(v_box[2][0], v_box[2][1], v_box[6][0], v_box[6][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
@@ -496,7 +523,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (ÜRÜN KİMLİK BİLGİLERİ EKLENMİŞ) ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, target_bct_m, target_ect_m):
     buf = io.BytesIO()
@@ -514,7 +541,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Paragraph(safe_pdf_str(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 4))
 
-    # 1. Ürün ve Ambalaj Kimlik Bilgileri (ZENGİN TABLO)
+    # 1. Ürün ve Ambalaj Kimlik Bilgileri
     elements.append(Paragraph(safe_pdf_str("1. Urun ve Ambalaj Kimlik Bilgileri"), h2_style))
     name_str = prod_info.get('box_name', '').strip() or "Standart Gida Kolisi"
     code_str = prod_info.get('box_code', '').strip() or "BELIRTILMEDI"
@@ -677,7 +704,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     buf.seek(0)
     return buf.getvalue()
 
-# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ (2B VE 3B ŞEMALAR ENTEGRELİ) ---
+# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ ---
 
 def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, target_ect_m):
     """Tedarikçiye verilmek üzere resmi Koli Satınalma Teknik Şartnamesi PDF'i üretir"""
@@ -738,7 +765,7 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     ]))
     elements.append(t_dim)
 
-    # 3. Koli İçi Paketleme Şeması (2B ve 3B GÖRSELİZASYON)
+    # 3. Koli İçi Paketleme Şeması (2B ve 3B)
     elements.append(Paragraph(safe_pdf_str("3. Koli Ici Urun Paketleme Semasi (2B ve 3B)"), sec_title))
     d_box_2d = pdf_draw_box_2d(box_in_l, box_in_w, prod_info['l'], prod_info['w'], prod_info['nx'], prod_info['ny'], width=255, height=95)
     d_box_3d = pdf_draw_box_3d_iso(box_in_l, box_in_w, box_in_h, prod_info['l'], prod_info['w'], prod_info['h'], prod_info['nx'], prod_info['ny'], prod_info['nz'], width=255, height=95)
@@ -828,44 +855,119 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     buf.seek(0)
     return buf.getvalue()
 
-# --- SIDEBAR GİRDİLERİ ---
+# --- SIDEBAR GİRDİLERİ & VERİTABANI YÖNETİMİ ---
+
+koli_db = load_koli_database()
 
 with st.sidebar:
     st.markdown("### 🏢 Okyanus Danışmanlık")
     st.caption("Geliştiren: **Dr. Murat Özdemir (Gıda Müh.)**")
     st.divider()
 
-    st.header("🏷️ Koli Tanımlama (İsteğe Bağlı)")
-    box_name_input = st.text_input("Koli / Ürün Adı", placeholder="Örn: 500g Salça Kolisi")
-    box_code_input = st.text_input("Koli Stok Kodu (SKU)", placeholder="Örn: KL-SL-500-01")
+    # --- REÇETE / KOLİ VERİTABANI MODÜLÜ ---
+    st.header("📂 Kayıtlı Koliler / Reçeteler")
+    saved_box_names = list(koli_db.keys())
+
+    selected_saved_box = st.selectbox(
+        "Kayıtlı Koli Seçin:",
+        ["-- Yeni Koli Formu --"] + saved_box_names,
+        key="selected_saved_box"
+    )
+
+    btn_load_col, btn_del_col = st.columns([1, 1])
+    with btn_load_col:
+        load_btn = st.button("📥 Yükle / Düzenle", use_container_width=True)
+    with btn_del_col:
+        delete_btn = st.button("🗑️ Koliyi Sil", use_container_width=True)
+
+    if delete_btn and selected_saved_box != "-- Yeni Koli Formu --":
+        if selected_saved_box in koli_db:
+            del koli_db[selected_saved_box]
+            save_koli_database(koli_db)
+            st.success(f"'{selected_saved_box}' silindi!")
+            st.rerun()
+
+    if load_btn and selected_saved_box != "-- Yeni Koli Formu --":
+        loaded_item = koli_db[selected_saved_box]
+        st.session_state["cur_box_name"] = loaded_item.get("box_name", "")
+        st.session_state["cur_box_code"] = loaded_item.get("box_code", "")
+        st.session_state["cur_p_length"] = loaded_item.get("p_length", 250.0)
+        st.session_state["cur_p_width"] = loaded_item.get("p_width", 120.0)
+        st.session_state["cur_p_height"] = loaded_item.get("p_height", 150.0)
+        st.session_state["cur_p_weight"] = loaded_item.get("p_weight", 450.0)
+        st.session_state["cur_nx"] = loaded_item.get("nx", 5)
+        st.session_state["cur_ny"] = loaded_item.get("ny", 1)
+        st.session_state["cur_nz"] = loaded_item.get("nz", 2)
+        st.session_state["cur_env_choice"] = loaded_item.get("env_choice", list(STORAGE_ENVIRONMENTS.keys())[2])
+        st.session_state["cur_humidity_rh"] = loaded_item.get("humidity_rh", 85)
+        st.session_state["cur_storage_days"] = loaded_item.get("storage_days", 60)
+        st.session_state["cur_stacking"] = loaded_item.get("stacking_pattern", STACK_OPTIONS[0])
+        st.session_state["cur_overhang"] = loaded_item.get("overhang", False)
+        st.session_state["cur_target_bct_m"] = loaded_item.get("target_bct_margin", 1.00)
+        st.session_state["cur_target_ect_m"] = loaded_item.get("target_ect_margin", 1.00)
+        st.session_state["cur_pallet_choice"] = loaded_item.get("pallet_choice", PALLET_OPTIONS[0])
+        st.session_state["cur_max_pallet_h"] = loaded_item.get("max_pallet_h", 1750)
+        st.session_state["cur_vehicle_choice"] = loaded_item.get("vehicle_choice", list(VEHICLE_DATABASE.keys())[0])
+        st.success(f"'{selected_saved_box}' yüklendi!")
+        st.rerun()
+
+    # Form Varsayılan Değerleri
+    def_name = st.session_state.get("cur_box_name", "Yöresel-1000g")
+    def_code = st.session_state.get("cur_box_code", "KL-YOR-1000")
+    def_l = st.session_state.get("cur_p_length", 250.0)
+    def_w = st.session_state.get("cur_p_width", 120.0)
+    def_h = st.session_state.get("cur_p_height", 150.0)
+    def_wt = st.session_state.get("cur_p_weight", 450.0)
+    def_nx = st.session_state.get("cur_nx", 5)
+    def_ny = st.session_state.get("cur_ny", 1)
+    def_nz = st.session_state.get("cur_nz", 2)
+    def_env = st.session_state.get("cur_env_choice", list(STORAGE_ENVIRONMENTS.keys())[2])
+    def_rh = st.session_state.get("cur_humidity_rh", 85)
+    def_days = st.session_state.get("cur_storage_days", 60)
+    def_stack = st.session_state.get("cur_stacking", STACK_OPTIONS[0])
+    def_over = st.session_state.get("cur_overhang", False)
+    def_tbct = st.session_state.get("cur_target_bct_m", 1.00)
+    def_tect = st.session_state.get("cur_target_ect_m", 1.00)
+    def_pal = st.session_state.get("cur_pallet_choice", PALLET_OPTIONS[0])
+    def_maxh = st.session_state.get("cur_max_pallet_h", 1750)
+    def_veh = st.session_state.get("cur_vehicle_choice", list(VEHICLE_DATABASE.keys())[6])
+
+    st.divider()
+
+    st.header("🏷️ Koli Tanımlama")
+    box_name_input = st.text_input("Koli / Ürün Adı", value=def_name, placeholder="Örn: 500g Salça Kolisi")
+    box_code_input = st.text_input("Koli Stok Kodu (SKU)", value=def_code, placeholder="Örn: KL-SL-500-01")
 
     st.header("1. Birincil Ürün Bilgileri")
-    p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=250.0, step=5.0)
-    p_width = st.number_input("Ürün Eni (Y - mm)", min_value=10.0, value=120.0, step=5.0)
-    p_height = st.number_input("Ürün Yüksekliği (Z - mm)", min_value=10.0, value=150.0, step=5.0)
-    p_weight = st.number_input("Ürün Brüt Ağırlığı (g)", min_value=1.0, value=450.0, step=10.0)
+    p_length = st.number_input("Ürün Boyu (X - mm)", min_value=10.0, value=float(def_l), step=5.0)
+    p_width = st.number_input("Ürün Eni (Y - mm)", min_value=10.0, value=float(def_w), step=5.0)
+    p_height = st.number_input("Ürün Yüksekliği (Z - mm)", min_value=10.0, value=float(def_h), step=5.0)
+    p_weight = st.number_input("Ürün Brüt Ağırlığı (g)", min_value=1.0, value=float(def_wt), step=10.0)
 
     st.header("2. Koli İçi Paketleme")
-    nx = st.number_input("X Yönünde Ürün", min_value=1, value=5, step=1)
-    ny = st.number_input("Y Yönünde Ürün", min_value=1, value=1, step=1)
-    nz = st.number_input("Z Yönünde Kat", min_value=1, value=2, step=1)
+    nx = st.number_input("X Yönünde Ürün", min_value=1, value=int(def_nx), step=1)
+    ny = st.number_input("Y Yönünde Ürün", min_value=1, value=int(def_ny), step=1)
+    nz = st.number_input("Z Yönünde Kat", min_value=1, value=int(def_nz), step=1)
     total_units_box = int(nx * ny * nz)
 
     st.header("3. ⚠️ Zorunlu Depolama Şartları")
-    env_choice = st.selectbox("Depolama Sıcaklık / Rejim", list(STORAGE_ENVIRONMENTS.keys()), index=2)
+    env_keys = list(STORAGE_ENVIRONMENTS.keys())
+    env_idx = env_keys.index(def_env) if def_env in env_keys else 2
+    env_choice = st.selectbox("Depolama Sıcaklık / Rejim", env_keys, index=env_idx)
     selected_env = STORAGE_ENVIRONMENTS[env_choice]
-    humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, selected_env["default_rh"], step=5)
-    storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, 60, step=5)
+    humidity_rh = st.slider("Depo Bağıl Nemi (% RH)", 40, 95, int(def_rh), step=5)
+    storage_days = st.slider("Depolama Süresi (Gün)", 5, 360, int(def_days), step=5)
     
-    active_stacking = st.selectbox("İstif Deseni", STACK_OPTIONS, index=0)
-    overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
+    stack_idx = STACK_OPTIONS.index(def_stack) if def_stack in STACK_OPTIONS else 0
+    active_stacking = st.selectbox("İstif Deseni", STACK_OPTIONS, index=stack_idx)
+    overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=def_over)
 
     st.subheader("🛡️ Parametrik Güvenlik Payları")
     target_bct_margin = st.slider(
         "Hedef BCT Güvenlik Payı (Kutu Ezilme)",
         min_value=1.00,
         max_value=3.00,
-        value=1.00,
+        value=float(def_tbct),
         step=0.05,
         help="Laboratuvar BCT ezilme testinin, depolama statik yüküne karşı sağlaması gereken asgari güvenlik çarpanı."
     )
@@ -873,7 +975,7 @@ with st.sidebar:
         "Hedef ECT Güvenlik Payı (Kenar Ezilme)",
         min_value=1.00,
         max_value=3.00,
-        value=1.00,
+        value=float(def_tect),
         step=0.05,
         help="Mukavva levha kenar ezilme direncinin (ECT), teorik gereken taban ECT'ye karşı sağlaması gereken asgari güvenlik çarpanı."
     )
@@ -882,16 +984,48 @@ with st.sidebar:
     available_vehicles = [k for k, v in VEHICLE_DATABASE.items() if v["cold_chain"] == is_cold_storage]
 
     st.header("4. Palet ve Taşıma Kriterleri")
-    active_pallet = st.selectbox("Palet Standardı", PALLET_OPTIONS, index=0)
-    active_max_h = st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=1750, step=50)
+    pal_idx = PALLET_OPTIONS.index(def_pal) if def_pal in PALLET_OPTIONS else 0
+    active_pallet = st.selectbox("Palet Standardı", PALLET_OPTIONS, index=pal_idx)
+    active_max_h = st.number_input("Maks. Palet Yüksekliği (mm)", min_value=500, value=int(def_maxh), step=50)
 
+    veh_idx = available_vehicles.index(def_veh) if def_veh in available_vehicles else 0
     active_vehicle = st.selectbox(
         "Taşıma Aracı" + (" (Frigofirik / Soğutmalı)" if is_cold_storage else " (Kuru Yük / Standart)"),
         available_vehicles,
-        index=0
+        index=veh_idx
     )
 
     st.divider()
+    # KAYDETME BUTONU
+    save_koli_btn = st.button("💾 Koliyi Kaydet / Güncelle", type="primary", use_container_width=True)
+    if save_koli_btn:
+        save_key = box_name_input.strip() if box_name_input.strip() else f"Koli_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        koli_db[save_key] = {
+            "box_name": box_name_input,
+            "box_code": box_code_input,
+            "p_length": p_length,
+            "p_width": p_width,
+            "p_height": p_height,
+            "p_weight": p_weight,
+            "nx": nx,
+            "ny": ny,
+            "nz": nz,
+            "env_choice": env_choice,
+            "humidity_rh": humidity_rh,
+            "storage_days": storage_days,
+            "stacking_pattern": active_stacking,
+            "overhang": overhang,
+            "target_bct_margin": target_bct_margin,
+            "target_ect_margin": target_ect_margin,
+            "pallet_choice": active_pallet,
+            "max_pallet_h": active_max_h,
+            "vehicle_choice": active_vehicle,
+            "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M')
+        }
+        save_koli_database(koli_db)
+        st.success(f"'{save_key}' başarıyla kaydedildi!")
+        st.rerun()
+
     st.caption("© 2026 Okyanus Danışmanlık\nDr. Murat Özdemir (Gıda Müh.)")
 
 # --- AKTİF SEÇİMLER VE HESAPLAMA ---
