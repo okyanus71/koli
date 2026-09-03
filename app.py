@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Parametrik BCT & ECT Güvenlik Payı)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
 """
 
 import streamlit as st
@@ -461,7 +461,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         [Paragraph(safe_pdf_str("<b>Birincil Urun Olculeri:</b>"), normal_style), Paragraph(f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", normal_style), Paragraph(safe_pdf_str("<b>Depolama Rejimi:</b>"), normal_style), Paragraph(safe_pdf_str(storage_info['env_name']), normal_style)],
         [Paragraph(safe_pdf_str("<b>Urun Birim Agirligi:</b>"), normal_style), Paragraph(f"{prod_info['weight']} g", normal_style), Paragraph(safe_pdf_str("<b>Depo Bagil Nemi:</b>"), normal_style), Paragraph(f"%{storage_info['rh']} RH", normal_style)],
         [Paragraph(safe_pdf_str("<b>Koli Ici Adet:</b>"), normal_style), Paragraph(safe_pdf_str(f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})"), normal_style), Paragraph(safe_pdf_str("<b>Depolama Suresi:</b>"), normal_style), Paragraph(safe_pdf_str(f"{storage_info['days']} Gun"), normal_style)],
-        [Paragraph(safe_pdf_str("<b>Koli Net / Brut Agirlik:</b>"), normal_style), Paragraph(f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", normal_style), Paragraph(safe_pdf_str("<b>Hedef Guvenlik Paylari:</b>"), normal_style), Paragraph(f"BCT: {target_bct_m:.2f}x | ECT: {target_ect_m:.2f}x", normal_style)]
+        [Paragraph(safe_pdf_str("<b>Koli Net / Brut Agirlik:</b>"), normal_style), Paragraph(f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", normal_style), Paragraph(safe_pdf_str("<b>Secilen Guvenlik Paylari:</b>"), normal_style), Paragraph(f"BCT: {target_bct_m:.2f}x | ECT: {target_ect_m:.2f}x", normal_style)]
     ]
     t_input = Table(input_data, colWidths=[135, 135, 135, 135])
     t_input.setStyle(TableStyle([
@@ -478,8 +478,8 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Paragraph(safe_pdf_str("2. Hedef Mukavemet & Mukavva Kalitesi Degerlendirmesi"), h2_style))
     b_out = active_eval['box_out_dims']
     rec_text = safe_pdf_str(f"<b>ONERILEN MUKAVVA: {active_eval['key']}</b> | Koli Dis Olculeri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b><br/>"
-                            f"Hedef Statik Depo Yuku: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Saglanan Lab. Test BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> (BCT Payi: <b>{active_eval['bct_safety_margin']:.2f}x</b>)<br/>"
-                            f"Teorik Min. ECT: <b>{active_eval['req_min_ect']:.2f} kN/m</b> | Saglanan ECT: <b>{active_eval['ect']:.2f} kN/m</b> (ECT Payi: <b>{active_eval['ect_safety_margin']:.2f}x</b>)")
+                            f"Hedef Statik Depo Yuku: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Secilen BCT Emniyet Payi: <b>{target_bct_m:.2f}x</b> | "
+                            f"Zorunlu Asgari Lab. BCT: <b>{active_eval['req_spec_bct_kgf']:.1f} kgf</b> (Mevcut Kapasite: {active_eval['actual_bct_kgf']:.1f} kgf - {active_eval['bct_safety_margin']:.2f}x)")
     t_rec = Table([[Paragraph(rec_text, normal_style)]], colWidths=[540])
     t_rec.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')),
@@ -490,7 +490,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(t_rec)
     elements.append(Spacer(1, 4))
 
-    mat_headers = ["Mukavva Tipi", "Kalinlik", "Mevcut ECT", "Min. ECT", "Hedef Statik", "Lab. BCT", "ECT Payi", "BCT Payi", "Durum"]
+    mat_headers = ["Mukavva Tipi", "Kalinlik", "Mevcut ECT", "Hedef Statik", "Asgari BCT Kriteri", "Saglanan BCT", "Mevcut Emniyet", "Durum"]
     mat_rows = [[Paragraph(safe_pdf_str(f"<b>{h}</b>"), bold_style) for h in mat_headers]]
     for item in board_evals:
         if item['key'] == active_eval['key'] and item['is_safe']:
@@ -506,14 +506,13 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
             Paragraph(safe_pdf_str(item['name']), normal_style),
             Paragraph(f"{item['caliper']:.1f} mm", normal_style),
             Paragraph(f"{item['ect']:.2f}", normal_style),
-            Paragraph(f"{item['req_min_ect']:.2f}", normal_style),
             Paragraph(f"{item['target_required_bct_kgf']:.0f} kgf", normal_style),
+            Paragraph(f"{item['req_spec_bct_kgf']:.0f} kgf", normal_style),
             Paragraph(f"{item['actual_bct_kgf']:.0f} kgf", normal_style),
-            Paragraph(f"{item['ect_safety_margin']:.2f}x", normal_style),
             Paragraph(f"{item['bct_safety_margin']:.2f}x", normal_style),
             Paragraph(f"<font color='{st_color}'><b>{safe_pdf_str(status_text)}</b></font>", normal_style)
         ])
-    t_mat = Table(mat_rows, colWidths=[95, 40, 50, 50, 60, 55, 55, 55, 80])
+    t_mat = Table(mat_rows, colWidths=[105, 45, 55, 65, 75, 65, 65, 65])
     t_mat.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -644,43 +643,28 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     ]))
     elements.append(t_dim)
 
-    # 3. Mukavemet & Hammadde Kalite Kriterleri (BCT & ECT Ayrı Ayrıştırılmış)
-    elements.append(Paragraph(safe_pdf_str("3. Mukavemet, Test ve Kabul Kriterleri (BCT & ECT Guvenlik Kriterleri)"), sec_title))
+    # 3. Mukavemet & Hammadde Kalite Kriterleri (Parametrik Kabul Kriterli)
+    elements.append(Paragraph(safe_pdf_str("3. Mukavemet, Test ve Kabul Kriterleri (Tedarikci Test Barajlari)"), sec_title))
     t_str = Table([
-        [Paragraph(safe_pdf_str("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(safe_pdf_str("<b>Zorunlu Deger ve Kriter</b>"), bold), Paragraph(safe_pdf_str("<b>Test Standardi</b>"), bold)],
+        [Paragraph(safe_pdf_str("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(safe_pdf_str("<b>Zorunlu Kabul Kriteri</b>"), bold), Paragraph(safe_pdf_str("<b>Test Standardi</b>"), bold)],
         [
-            Paragraph(safe_pdf_str("Tedarikci Lab. Kabul BCT Degeri"), normal),
-            Paragraph(safe_pdf_str(f"<b>Minimum {active_eval['actual_bct_kgf']:.1f} kgf</b> (Kabul Kriteri)"), normal),
+            Paragraph(safe_pdf_str("Tedarikci Zorunlu Lab. BCT Kriteri"), normal),
+            Paragraph(safe_pdf_str(f"<b>Minimum {active_eval['req_spec_bct_kgf']:.1f} kgf</b> (Secilen Emniyet: {target_bct_m:.2f}x)"), normal),
             Paragraph("ISO 12048 / ASTM D642", normal)
         ],
         [
             Paragraph(safe_pdf_str("Hedef Statik Saha Depolama Yuku"), normal),
-            Paragraph(safe_pdf_str(f"<b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> (Gercek Saha Depo Yuku)"), normal),
+            Paragraph(safe_pdf_str(f"<b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> (Referans Statik Depo Yuku)"), normal),
             Paragraph("ASTM D4169", normal)
         ],
         [
-            Paragraph(safe_pdf_str("BCT Guvenlik Payi (Emniyet Carpani)"), normal),
-            Paragraph(safe_pdf_str(f"<b>{active_eval['bct_safety_margin']:.2f}x</b> (Belirlenen Asgari Baraj: {target_bct_m:.2f}x)"), normal),
-            Paragraph("Muhendislik Orani", normal)
-        ],
-        [
-            Paragraph(safe_pdf_str("Tedarikci Kenar Ezilme Direnci (ECT)"), normal),
-            Paragraph(safe_pdf_str(f"<b>Minimum {active_eval['ect']:.2f} kN/m</b> (ISO Test Kriteri)"), normal),
+            Paragraph(safe_pdf_str("Tedarikci Zorunlu Min. ECT Kriteri"), normal),
+            Paragraph(safe_pdf_str(f"<b>Minimum {active_eval['req_spec_ect_kn_m']:.2f} kN/m</b> (Secilen Emniyet: {target_ect_m:.2f}x)"), normal),
             Paragraph("ISO 3037 / TAPPI T 811", normal)
         ],
         [
-            Paragraph(safe_pdf_str("Teorik Gereken Taban ECT"), normal),
-            Paragraph(safe_pdf_str(f"<b>{active_eval['req_min_ect']:.2f} kN/m</b> (Net Ihtiyac)"), normal),
-            Paragraph("McKee Formulu", normal)
-        ],
-        [
-            Paragraph(safe_pdf_str("ECT Guvenlik Payi (Emniyet Carpani)"), normal),
-            Paragraph(safe_pdf_str(f"<b>{active_eval['ect_safety_margin']:.2f}x</b> (Belirlenen Asgari Baraj: {target_ect_m:.2f}x)"), normal),
-            Paragraph("Muhendislik Orani", normal)
-        ],
-        [
-            Paragraph(safe_pdf_str("Dalga Cinsi ve Mukavva Tipi"), normal),
-            Paragraph(safe_pdf_str(f"{active_eval['key']}"), normal),
+            Paragraph(safe_pdf_str("Onerilen Mukavva Kalitesi"), normal),
+            Paragraph(safe_pdf_str(f"<b>{active_eval['key']}</b> (Nominal Guv: {active_eval['bct_safety_margin']:.2f}x)"), normal),
             Paragraph("FEFCO Standardi", normal)
         ],
         [
@@ -694,8 +678,8 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 2.0),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.0)
+        ('TOPPADDING', (0,0), (-1,-1), 2.2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
     ]))
     elements.append(t_str)
 
@@ -765,7 +749,7 @@ with st.sidebar:
         "Hedef BCT Güvenlik Payı (Kutu Ezilme)",
         min_value=1.00,
         max_value=3.00,
-        value=1.20,
+        value=1.00,
         step=0.05,
         help="Laboratuvar BCT ezilme testinin, depolama statik yüküne karşı sağlaması gereken asgari güvenlik çarpanı."
     )
@@ -773,7 +757,7 @@ with st.sidebar:
         "Hedef ECT Güvenlik Payı (Kenar Ezilme)",
         min_value=1.00,
         max_value=3.00,
-        value=1.15,
+        value=1.00,
         step=0.05,
         help="Mukavva levha kenar ezilme direncinin (ECT), teorik gereken taban ECT'ye karşı sağlaması gereken asgari güvenlik çarpanı."
     )
@@ -839,7 +823,10 @@ for key, bdata in BOARD_DATABASE.items():
     target_bct_n = target_required_bct_kgf * 9.80665
     req_min_ect = target_bct_n / (5.87 * math.sqrt(caliper * perimeter)) if (caliper * perimeter) > 0 else 0
     
-    # Parametrik Güvenlik Payı Hesaplamaları (BCT & ECT)
+    # Parametrik Güvenlik Payı Kriterleri
+    req_spec_bct_kgf = target_required_bct_kgf * target_bct_margin
+    req_spec_ect_kn_m = req_min_ect * target_ect_margin
+    
     bct_safety_margin = actual_bct_kgf / target_required_bct_kgf if target_required_bct_kgf > 0 else 999.0
     ect_safety_margin = ect / req_min_ect if req_min_ect > 0 else 999.0
     
@@ -850,6 +837,8 @@ for key, bdata in BOARD_DATABASE.items():
         "key": key, "name": bdata["name"], "caliper": caliper, "ect": ect,
         "req_min_ect": req_min_ect, "actual_bct_kgf": actual_bct_kgf,
         "target_required_bct_kgf": target_required_bct_kgf,
+        "req_spec_bct_kgf": req_spec_bct_kgf,
+        "req_spec_ect_kn_m": req_spec_ect_kn_m,
         "bct_safety_margin": bct_safety_margin,
         "ect_safety_margin": ect_safety_margin,
         "safety_margin": bct_safety_margin,
@@ -1048,24 +1037,24 @@ if cur_step == 1:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Hedef Statik Depo Yükü", f"{active_eval['target_required_bct_kgf']:.1f} kgf", "Gerçek Saha Yükü")
     m2.metric(
-        "Tedarikçi Min. Lab BCT",
-        f"{active_eval['actual_bct_kgf']:.1f} kgf",
-        f"Hedef BCT Emniyet: {target_bct_margin:.2f}x (Sağlanan: {active_eval['bct_safety_margin']:.2f}x)"
+        "Zorunlu Asgari Lab BCT",
+        f"{active_eval['req_spec_bct_kgf']:.1f} kgf",
+        f"Seçilen Emniyet: {target_bct_margin:.2f}x (Mevcut: {active_eval['actual_bct_kgf']:.1f} kgf)"
     )
     m3.metric(
-        "Gereken Min. ECT",
-        f"{active_eval['req_min_ect']:.2f} kN/m",
-        f"Hedef ECT Emniyet: {target_ect_margin:.2f}x (Mevcut: {active_eval['ect']:.2f} kN/m)"
+        "Zorunlu Asgari ECT",
+        f"{active_eval['req_spec_ect_kn_m']:.2f} kN/m",
+        f"Seçilen Emniyet: {target_ect_margin:.2f}x (Mevcut: {active_eval['ect']:.2f} kN/m)"
     )
     m4.metric(
-        "Gerçekleşen Güvenlik Payı",
-        f"{active_eval['bct_safety_margin']:.2f}x (BCT) / {active_eval['ect_safety_margin']:.2f}x (ECT)",
-        f"Asgari Baraj: {target_bct_margin:.2f}x BCT / {target_ect_margin:.2f}x ECT"
+        "Sağlanan Güvenlik Payı",
+        f"{active_eval['bct_safety_margin']:.2f}x BCT / {active_eval['ect_safety_margin']:.2f}x ECT",
+        f"Belirlenen Asgari Baraj: {target_bct_margin:.2f}x BCT / {target_ect_margin:.2f}x ECT"
     )
 
     st.write("")
     if active_eval["is_safe"]:
-        st.success(f"🏆 **ÖNERİLEN MUKAVVA YAPISI: {recommended_board_key}**\n\nBu mukavva yapısı, belirtilen ortam şartlarında gereken `{active_eval['target_required_bct_kgf']:.1f} kgf` hedef statik yüke karşı **{active_eval['bct_safety_margin']:.2f}x BCT** ve **{active_eval['ect_safety_margin']:.2f}x ECT güvenlik payı** sağlayarak belirlediğiniz asgari şartları ({target_bct_margin:.2f}x BCT / {target_ect_margin:.2f}x ECT) eksiksiz karşılayan en ekonomik yapıdır.")
+        st.success(f"🏆 **ÖNERİLEN MUKAVVA YAPISI: {recommended_board_key}**\n\nBu mukavva yapısı, belirtilen ortam şartlarında gereken `{active_eval['target_required_bct_kgf']:.1f} kgf` hedef statik yüke karşı seçtiğiniz **{target_bct_margin:.2f}x BCT** ve **{target_ect_margin:.2f}x ECT güvenlik payını** karşılayarak `{active_eval['actual_bct_kgf']:.1f} kgf` laboratuvar ezilme dayanımı sunan en ekonomik mukavva kalitesidir.")
     else:
         st.error(f"⚠️ **DİKKAT: Mukavva yapısı seçilen asgari ({target_bct_margin:.2f}x BCT / {target_ect_margin:.2f}x ECT) güvenlik paylarını karşılayamıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile bu ortam ve istif şartlarında hedefin altında kalmaktadır. Kat sayısını düşürün veya koli içi seperatör/destek kullanın.")
 
@@ -1077,11 +1066,10 @@ if cur_step == 1:
         * **Tavsiye Edilen Mukavva Kalitesi:** `{active_eval['key']}`
         * **Koli İç Ölçüleri:** `{int(box_in_l)} x {int(box_in_w)} x {int(box_in_h)} mm (±2 mm)`
         * **Koli Dış Ölçüleri:** `{int(box_out_l)} x {int(box_out_w)} x {int(box_out_h)} mm (±3 mm)`
-        * **Tedarikçi Laboratuvar Ezilme Testi (BCT Kabul Kriteri):** `≥ {active_eval['actual_bct_kgf']:.1f} kgf` (ISO 12048)
         * **Hedef Statik Saha Depolama Yükü:** `{active_eval['target_required_bct_kgf']:.1f} kgf` (ASTM D4169)
-        * **Hedef BCT Güvenlik Payı:** `{active_eval['bct_safety_margin']:.2f}x` (Belirlenen Asgari Baraj: `{target_bct_margin:.2f}x`)
-        * **Minimum Kenar Ezilme Direnci (ECT Kabul Kriteri):** `≥ {active_eval['ect']:.2f} kN/m` (ISO 3037)
-        * **Hedef ECT Güvenlik Payı:** `{active_eval['ect_safety_margin']:.2f}x` (Belirlenen Asgari Baraj: `{target_ect_margin:.2f}x`)
+        * **Tedarikçi Zorunlu Asgari Lab. BCT Test Kriteri:** `≥ {active_eval['req_spec_bct_kgf']:.1f} kgf` (ISO 12048 - Seçilen Emniyet Payı: `{target_bct_margin:.2f}x`)
+        * **Tedarikçi Zorunlu Asgari ECT Test Kriteri:** `≥ {active_eval['req_spec_ect_kn_m']:.2f} kN/m` (ISO 3037 - Seçilen Emniyet Payı: `{target_ect_margin:.2f}x`)
+        * **Önerilen Mukavvanın Sağladığı Nominal Güç:** `{active_eval['actual_bct_kgf']:.1f} kgf BCT` / `{active_eval['ect']:.2f} kN/m ECT` (Nominal Emniyet: `{active_eval['bct_safety_margin']:.2f}x`)
         * **Maksimum İzin Verilen Nem Oranı:** `%7 - %9 (Teslimatta %10 üzeri partiler reddedilir)`
         """)
         
@@ -1107,9 +1095,9 @@ if cur_step == 1:
 
         table_rows.append({
             "Mukavva Tipi": item["key"], "Kalınlık (mm)": f"{item['caliper']:.1f}", "Mevcut ECT (kN/m)": f"{item['ect']:.2f}",
-            "Min. Taban ECT": f"{item['req_min_ect']:.2f} kN/m", "Hedef Statik Yük": f"{item['target_required_bct_kgf']:.1f} kgf",
-            "Sağlanan Lab. BCT": f"{item['actual_bct_kgf']:.1f} kgf", "BCT Emniyet": f"{item['bct_safety_margin']:.2f}x",
-            "ECT Emniyet": f"{item['ect_safety_margin']:.2f}x", "Durum ve Değerlendirme": status_text, "_status_type": status_type
+            "Min. Şartname ECT": f"{item['req_spec_ect_kn_m']:.2f} kN/m", "Hedef Statik Yük": f"{item['target_required_bct_kgf']:.1f} kgf",
+            "Min. Şartname BCT": f"{item['req_spec_bct_kgf']:.1f} kgf", "Mevcut BCT Kapasitesi": f"{item['actual_bct_kgf']:.1f} kgf",
+            "Sağlanan Emniyet": f"{item['bct_safety_margin']:.2f}x", "Durum ve Değerlendirme": status_text, "_status_type": status_type
         })
     
     df_results = pd.DataFrame(table_rows)
@@ -1134,8 +1122,8 @@ if cur_step == 1:
         * **İstifleme Deseni Kaybı ($P_f$):** `x{pf:.2f}`
         * **Taşma Payı Kaybı ($O_f$):** `x{of:.2f}`
         * **Toplam Çevresel Yorulma Katsayısı ($S_f$):** `{sf:.2f}`
-        * **Hedef Asgari BCT Güvenlik Payı Parametresi:** `{target_bct_margin:.2f}x`
-        * **Hedef Asgari ECT Güvenlik Payı Parametresi:** `{target_ect_margin:.2f}x`
+        * **Hedef Asgari BCT Güvenlik Payı:** `{target_bct_margin:.2f}x`
+        * **Hedef Asgari ECT Güvenlik Payı:** `{target_ect_margin:.2f}x`
         """)
 
     st.write("")
