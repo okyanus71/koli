@@ -409,7 +409,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
     return d
 
 def safe_pdf_str(text):
-    """ReportLab font motorunun siyah kutu basmasını önleyen güvenli metin dönüştürücü"""
+    """ReportLab Helvetica font motorunun siyah kutu (■) basmasını önleyen güvenli metin dönüştürücü"""
     if not isinstance(text, str):
         text = str(text)
     mapping = {
@@ -423,7 +423,7 @@ def safe_pdf_str(text):
 
 # --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
 
-def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, user_target_margin):
+def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, target_margin):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=25, leftMargin=25, topMargin=20, bottomMargin=20)
     styles = getSampleStyleSheet()
@@ -461,7 +461,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         [Paragraph(safe_pdf_str("<b>Birincil Urun Olculeri:</b>"), normal_style), Paragraph(f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", normal_style), Paragraph(safe_pdf_str("<b>Depolama Rejimi:</b>"), normal_style), Paragraph(safe_pdf_str(storage_info['env_name']), normal_style)],
         [Paragraph(safe_pdf_str("<b>Urun Birim Agirligi:</b>"), normal_style), Paragraph(f"{prod_info['weight']} g", normal_style), Paragraph(safe_pdf_str("<b>Depo Bagil Nemi:</b>"), normal_style), Paragraph(f"%{storage_info['rh']} RH", normal_style)],
         [Paragraph(safe_pdf_str("<b>Koli Ici Adet:</b>"), normal_style), Paragraph(safe_pdf_str(f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})"), normal_style), Paragraph(safe_pdf_str("<b>Depolama Suresi:</b>"), normal_style), Paragraph(safe_pdf_str(f"{storage_info['days']} Gun"), normal_style)],
-        [Paragraph(safe_pdf_str("<b>Koli Net / Brut Agirlik:</b>"), normal_style), Paragraph(f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", normal_style), Paragraph(safe_pdf_str("<b>Hedef Guvenlik Payi (Parametrik):</b>"), normal_style), Paragraph(f"{user_target_margin:.2f}x (Asgari Baraj)", normal_style)]
+        [Paragraph(safe_pdf_str("<b>Koli Net / Brut Agirlik:</b>"), normal_style), Paragraph(f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", normal_style), Paragraph(safe_pdf_str("<b>Hedef Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_margin:.2f}x (Asgari Baraj)", normal_style)]
     ]
     t_input = Table(input_data, colWidths=[135, 135, 135, 135])
     t_input.setStyle(TableStyle([
@@ -479,7 +479,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     b_out = active_eval['box_out_dims']
     rec_text = safe_pdf_str(f"<b>ONERILEN MUKAVVA: {active_eval['key']}</b> | Koli Dis Olculeri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b><br/>"
                             f"Hedef Statik Depo Yuku: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Saglanan Lab. Test BCT: <b>{active_eval['actual_bct_kgf']:.1f} kgf</b> | "
-                            f"Gerceklesen Guvenlik Payi: <b>{active_eval['safety_margin']:.2f}x</b> (Hedef: {user_target_margin:.2f}x)")
+                            f"Gerceklesen Guvenlik Payi: <b>{active_eval['safety_margin']:.2f}x</b> (Hedef: {target_margin:.2f}x)")
     t_rec = Table([[Paragraph(rec_text, normal_style)]], colWidths=[540])
     t_rec.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#d4edda')),
@@ -496,8 +496,8 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         if item['key'] == active_eval['key'] and item['is_safe']:
             status_text = f"EN UYGUN ({item['safety_margin']:.2f}x)"; st_color = '#155724'
         elif not item['is_safe']:
-            status_text = f"YETERSIZ ({item['safety_margin']:.2f}x)"; st_color = '#721c24'
-        elif item['safety_margin'] >= (user_target_margin * 1.5):
+            status_text = f"YETERSIZ ({item['safety_margin']:.2f}x < {target_margin:.2f}x)"; st_color = '#721c24'
+        elif item['safety_margin'] >= (target_margin * 1.5):
             status_text = f"ASIRI GUCLU ({item['safety_margin']:.2f}x)"; st_color = '#004085'
         else:
             status_text = f"UYGUN ({item['safety_margin']:.2f}x)"; st_color = '#383d41'
@@ -583,7 +583,7 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
 
 # --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ ---
 
-def generate_box_spec_pdf(prod_info, storage_info, active_eval, user_target_margin):
+def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_margin):
     """Tedarikçiye verilmek üzere resmi Koli Satınalma Teknik Şartnamesi PDF'i üretir"""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=25, bottomMargin=25)
@@ -663,8 +663,8 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, user_target_marg
         ],
         [
             Paragraph(safe_pdf_str("Emniyet / Guvenlik Payi"), normal),
-            Paragraph(safe_pdf_str(f"<b>{active_eval['safety_margin']:.2f}x</b> (Belirlenen Asgari Baraj: {user_target_margin:.2f}x)"), normal),
-            Paragraph(safe_pdf_str("Mühendislik Kriteri"), normal)
+            Paragraph(safe_pdf_str(f"<b>{active_eval['safety_margin']:.2f}x</b> (Belirlenen Asgari Baraj: {target_margin:.2f}x)"), normal),
+            Paragraph(safe_pdf_str("Muhendislik Kriteri"), normal)
         ],
         [
             Paragraph(safe_pdf_str("Dalga Cinsi ve Mukavva Tipi"), normal),
@@ -1021,15 +1021,15 @@ if cur_step == 1:
     st.subheader(f"🎯 1. Adım: Hedef Koli Mukavemet Analizi ({env_choice})")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Hedef Statik Depo Yükü", f"{active_eval['target_required_bct_kgf']:.1f} kgf", "Gerçek Saha Yükü")
-    m2.metric("Tedarikçi Min. Lab BCT", f"{active_eval['actual_bct_kgf']:.1f} kgf", f"Hedef Emniyet: {user_target_margin:.2f}x")
+    m2.metric("Tedarikçi Min. Lab BCT", f"{active_eval['actual_bct_kgf']:.1f} kgf", f"Hedef Emniyet: {target_safety_margin:.2f}x")
     m3.metric("Gereken Min. ECT", f"{active_eval['req_min_ect']:.2f} kN/m", f"Mevcut: {active_eval['ect']:.2f} kN/m")
-    m4.metric("Gerçekleşen Güvenlik Payı", f"{active_eval['safety_margin']:.2f}x", f"Asgari Baraj: {user_target_margin:.2f}x")
+    m4.metric("Gerçekleşen Güvenlik Payı", f"{active_eval['safety_margin']:.2f}x", f"Asgari Baraj: {target_safety_margin:.2f}x")
 
     st.write("")
     if active_eval["is_safe"]:
-        st.success(f"🏆 **ÖNERİLEN MUKAVVA YAPISI: {recommended_board_key}**\n\nBu mukavva yapısı, belirtilen ortam şartlarında gereken `{active_eval['target_required_bct_kgf']:.1f} kgf` hedef statik yüke karşı **{active_eval['safety_margin']:.2f}x güvenlik payı** sağlayarak belirlediğiniz `{user_target_margin:.2f}x` asgari şartı karşılayan en ekonomik yapıdır.")
+        st.success(f"🏆 **ÖNERİLEN MUKAVVA YAPISI: {recommended_board_key}**\n\nBu mukavva yapısı, belirtilen ortam şartlarında gereken `{active_eval['target_required_bct_kgf']:.1f} kgf` hedef statik yüke karşı **{active_eval['safety_margin']:.2f}x güvenlik payı** sağlayarak belirlediğiniz `{target_safety_margin:.2f}x` asgari şartı karşılayan en ekonomik yapıdır.")
     else:
-        st.error(f"⚠️ **DİKKAT: Mukavva yapısı seçilen asgari {user_target_margin:.2f}x güvenlik payını karşılayamıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile bu ortam ve istif şartlarında hedefin altında kalmaktadır. Kat sayısını düşürün veya seperatör kullanın.")
+        st.error(f"⚠️ **DİKKAT: Mukavva yapısı seçilen asgari {target_safety_margin:.2f}x güvenlik payını karşılayamıyor!**\n\nEn güçlü yapı olan `{recommended_board_key}` bile bu ortam ve istif şartlarında hedefin altında kalmaktadır. Kat sayısını düşürün veya seperatör kullanın.")
 
     # --- KOLİ SATINALMA TEKNİK ŞARTNAME PANELİ ---
     with st.expander("📋 Tedarikçiye Gönderilecek Koli Satınalma Teknik Şartnamesi (İncele & İndir)", expanded=True):
@@ -1059,8 +1059,8 @@ if cur_step == 1:
         if item["key"] == recommended_board_key and item["is_safe"]:
             status_text = f"🏆 EN UYGUN ({item['safety_margin']:.2f}x)"; status_type = "optimum"
         elif not item["is_safe"]:
-            status_text = f"❌ YETERSİZ ({item['safety_margin']:.2f}x < {user_target_margin:.2f}x)"; status_type = "weak"
-        elif item["safety_margin"] >= (user_target_margin * 1.5):
+            status_text = f"❌ YETERSİZ ({item['safety_margin']:.2f}x < {target_safety_margin:.2f}x)"; status_type = "weak"
+        elif item["safety_margin"] >= (target_safety_margin * 1.5):
             status_text = f"🛡️ AŞIRI GÜÇLÜ ({item['safety_margin']:.2f}x)"; status_type = "overkill"
         else:
             status_text = f"✅ UYGUN ({item['safety_margin']:.2f}x)"; status_type = "safe"
@@ -1093,7 +1093,7 @@ if cur_step == 1:
         * **İstifleme Deseni Kaybı ($P_f$):** `x{pf:.2f}`
         * **Taşma Payı Kaybı ($O_f$):** `x{of:.2f}`
         * **Toplam Çevresel Yorulma Katsayısı ($S_f$):** `{sf:.2f}`
-        * **Hedef Asgari Güvenlik Payı Parametresi:** `{user_target_margin:.2f}x`
+        * **Hedef Asgari Güvenlik Payı Parametresi:** `{target_safety_margin:.2f}x`
         """)
 
     st.write("")
