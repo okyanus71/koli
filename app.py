@@ -421,7 +421,7 @@ def safe_pdf_str(text):
         text = text.replace(k, v)
     return text
 
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (ÜRÜN BİLGİLERİ EKLENMİŞ) ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, target_bct_m, target_ect_m):
     buf = io.BytesIO()
@@ -439,31 +439,53 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     elements.append(Paragraph(safe_pdf_str(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 4))
 
-    box_name_disp = prod_info.get('box_name', '').strip()
-    box_code_disp = prod_info.get('box_code', '').strip()
-    if box_name_disp or box_code_disp:
-        name_str = box_name_disp if box_name_disp else "Belirtilmedi"
-        code_str = box_code_disp if box_code_disp else "Belirtilmedi"
-        id_table_data = [[Paragraph(safe_pdf_str(f"<b>Koli / Urun Adi:</b> {name_str}"), normal_style), Paragraph(safe_pdf_str(f"<b>Koli Stok Kodu (SKU):</b> {code_str}"), normal_style)]]
-        t_id = Table(id_table_data, colWidths=[270, 270])
-        t_id.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#e8f4f8')),
-            ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#1f77b4')),
-            ('TOPPADDING', (0,0), (-1,-1), 2.5),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2.5)
-        ]))
-        elements.append(t_id)
-        elements.append(Spacer(1, 3))
-
-    # 1. Girdiler
-    elements.append(Paragraph(safe_pdf_str("1. Temel Girdi Parametreleri ve Depolama Kosullari"), h2_style))
-    input_data = [
-        [Paragraph(safe_pdf_str("<b>Birincil Urun Olculeri:</b>"), normal_style), Paragraph(f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", normal_style), Paragraph(safe_pdf_str("<b>Depolama Rejimi:</b>"), normal_style), Paragraph(safe_pdf_str(storage_info['env_name']), normal_style)],
-        [Paragraph(safe_pdf_str("<b>Urun Birim Agirligi:</b>"), normal_style), Paragraph(f"{prod_info['weight']} g", normal_style), Paragraph(safe_pdf_str("<b>Depo Bagil Nemi:</b>"), normal_style), Paragraph(f"%{storage_info['rh']} RH", normal_style)],
-        [Paragraph(safe_pdf_str("<b>Koli Ici Adet:</b>"), normal_style), Paragraph(safe_pdf_str(f"{prod_info['units']} Adet ({prod_info['nx']}x{prod_info['ny']}x{prod_info['nz']})"), normal_style), Paragraph(safe_pdf_str("<b>Depolama Suresi:</b>"), normal_style), Paragraph(safe_pdf_str(f"{storage_info['days']} Gun"), normal_style)],
-        [Paragraph(safe_pdf_str("<b>Koli Net / Brut Agirlik:</b>"), normal_style), Paragraph(f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", normal_style), Paragraph(safe_pdf_str("<b>Secilen Guvenlik Paylari:</b>"), normal_style), Paragraph(f"BCT: {target_bct_m:.2f}x | ECT: {target_ect_m:.2f}x", normal_style)]
+    # 1. Ürün ve Ambalaj Kimlik Bilgileri (GÖRSELDEKİ FORMATTA ZENGİN TABLO)
+    elements.append(Paragraph(safe_pdf_str("1. Urun ve Ambalaj Kimlik Bilgileri"), h2_style))
+    name_str = prod_info.get('box_name', '').strip() or "Standart Gida Kolisi"
+    code_str = prod_info.get('box_code', '').strip() or "BELIRTILMEDI"
+    
+    id_product_data = [
+        [
+            Paragraph(safe_pdf_str("<b>Koli / Urun Tanimi:</b>"), normal_style), Paragraph(safe_pdf_str(name_str), normal_style),
+            Paragraph(safe_pdf_str("<b>Koli Kodu / SKU:</b>"), normal_style), Paragraph(safe_pdf_str(code_str), normal_style)
+        ],
+        [
+            Paragraph(safe_pdf_str("<b>Birincil Urun Olculeri:</b>"), normal_style), Paragraph(f"{prod_info['l']} x {prod_info['w']} x {prod_info['h']} mm", normal_style),
+            Paragraph(safe_pdf_str("<b>Urun Birim Agirligi:</b>"), normal_style), Paragraph(f"{prod_info['weight']} g", normal_style)
+        ],
+        [
+            Paragraph(safe_pdf_str("<b>Koli Ici Paketleme Matrisi:</b>"), normal_style), Paragraph(safe_pdf_str(f"{prod_info['nx']}x{prod_info['ny']} taban x {prod_info['nz']} kat ({prod_info['units']} Adet)"), normal_style),
+            Paragraph(safe_pdf_str("<b>Koli Net / Brut Agirligi:</b>"), normal_style), Paragraph(f"{prod_info['net_kg']:.2f} kg / {active_eval['gross_koli_kg']:.2f} kg", normal_style)
+        ]
     ]
-    t_input = Table(input_data, colWidths=[135, 135, 135, 135])
+    t_prod = Table(id_product_data, colWidths=[130, 140, 125, 145])
+    t_prod.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING', (0,0), (-1,-1), 2.2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
+    ]))
+    elements.append(t_prod)
+    elements.append(Spacer(1, 4))
+
+    # 2. Depolama Koşulları ve Mukavemet Değerlendirmesi
+    elements.append(Paragraph(safe_pdf_str("2. Depolama Kosullari ve Hedef Mukavemet Degerlendirmesi"), h2_style))
+    input_data = [
+        [
+            Paragraph(safe_pdf_str("<b>Depolama Rejimi:</b>"), normal_style), Paragraph(safe_pdf_str(storage_info['env_name']), normal_style),
+            Paragraph(safe_pdf_str("<b>Depo Bagil Nemi:</b>"), normal_style), Paragraph(f"%{storage_info['rh']} RH", normal_style)
+        ],
+        [
+            Paragraph(safe_pdf_str("<b>Depolama Suresi:</b>"), normal_style), Paragraph(safe_pdf_str(f"{storage_info['days']} Gun"), normal_style),
+            Paragraph(safe_pdf_str("<b>Istif Deseni:</b>"), normal_style), Paragraph(safe_pdf_str(storage_info['pattern']), normal_style)
+        ],
+        [
+            Paragraph(safe_pdf_str("<b>Hedef BCT Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_bct_m:.2f}x (Asgari Baraj)", normal_style),
+            Paragraph(safe_pdf_str("<b>Hedef ECT Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_ect_m:.2f}x (Asgari Baraj)", normal_style)
+        ]
+    ]
+    t_input = Table(input_data, colWidths=[130, 140, 125, 145])
     t_input.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
@@ -472,10 +494,8 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
         ('BOTTOMPADDING', (0,0), (-1,-1), 2)
     ]))
     elements.append(t_input)
-    elements.append(Spacer(1, 4))
+    elements.append(Spacer(1, 3))
 
-    # 2. Mukavemet
-    elements.append(Paragraph(safe_pdf_str("2. Hedef Mukavemet & Mukavva Kalitesi Degerlendirmesi"), h2_style))
     b_out = active_eval['box_out_dims']
     rec_text = safe_pdf_str(f"<b>ONERILEN MUKAVVA: {active_eval['key']}</b> | Koli Dis Olculeri: <b>{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm</b><br/>"
                             f"Hedef Statik Depo Yuku: <b>{active_eval['target_required_bct_kgf']:.1f} kgf</b> | Secilen BCT Emniyet Payi: <b>{target_bct_m:.2f}x</b> | "
@@ -643,7 +663,7 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     ]))
     elements.append(t_dim)
 
-    # 3. Mukavemet & Hammadde Kalite Kriterleri (Parametrik Kabul Kriterli)
+    # 3. Mukavemet & Hammadde Kalite Kriterleri
     elements.append(Paragraph(safe_pdf_str("3. Mukavemet, Test ve Kabul Kriterleri (Tedarikci Test Barajlari)"), sec_title))
     t_str = Table([
         [Paragraph(safe_pdf_str("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(safe_pdf_str("<b>Zorunlu Kabul Kriteri</b>"), bold), Paragraph(safe_pdf_str("<b>Test Standardi</b>"), bold)],
