@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Kalıcı Kaydetme, Düzenleme & Silme Entegrasyonlu)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Otomatik Enter/Seçim Yüklemeli & Yeşil Butonlu)
 """
 
 import streamlit as st
@@ -50,8 +50,8 @@ def load_koli_database():
                 "storage_days": 60,
                 "stacking_pattern": "Kolon (Üst Üste - %100 Direnç)",
                 "overhang": False,
-                "target_bct_margin": 1.20,
-                "target_ect_margin": 1.15,
+                "target_bct_margin": 1.00,
+                "target_ect_margin": 1.00,
                 "pallet_choice": "Euro Palet (1200 x 800 mm)",
                 "max_pallet_h": 1750,
                 "vehicle_choice": "Frigofirik Tır (13.60 m Termokinli / Soğutmalı)",
@@ -583,8 +583,8 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
             Paragraph(safe_pdf_str("<b>Istif Deseni:</b>"), normal_style), Paragraph(safe_pdf_str(storage_info['pattern']), normal_style)
         ],
         [
-            Paragraph(safe_pdf_str("<b>Hedef BCT Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_bct_m:.2f}x (Asgari Baraj)", normal_style),
-            Paragraph(safe_pdf_str("<b>Hedef ECT Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_ect_m:.2f}x (Asgari Baraj)", normal_style)
+            Paragraph(safe_pdf_str("<b>Hedef BCT Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_bct_m:.2f}x (Secilen Baraj)", normal_style),
+            Paragraph(safe_pdf_str("<b>Hedef ECT Guvenlik Payi:</b>"), normal_style), Paragraph(f"{target_ect_m:.2f}x (Secilen Baraj)", normal_style)
         ]
     ]
     t_input = Table(input_data, colWidths=[130, 140, 125, 145])
@@ -859,6 +859,32 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
 
 koli_db = load_koli_database()
 
+# Otomatik Yükleme Fonksiyonu (Selectbox değiştiğinde veya Enter'a basıldığında çalışır)
+def on_koli_selection_change():
+    selected = st.session_state.get("koli_selector")
+    if selected and selected != "-- Yeni Koli Formu --" and selected in koli_db:
+        item = koli_db[selected]
+        st.session_state["cur_box_name"] = item.get("box_name", "")
+        st.session_state["cur_box_code"] = item.get("box_code", "")
+        st.session_state["cur_p_length"] = float(item.get("p_length", 250.0))
+        st.session_state["cur_p_width"] = float(item.get("p_width", 120.0))
+        st.session_state["cur_p_height"] = float(item.get("p_height", 150.0))
+        st.session_state["cur_p_weight"] = float(item.get("p_weight", 450.0))
+        st.session_state["cur_nx"] = int(item.get("nx", 5))
+        st.session_state["cur_ny"] = int(item.get("ny", 1))
+        st.session_state["cur_nz"] = int(item.get("nz", 2))
+        st.session_state["cur_env_choice"] = item.get("env_choice", list(STORAGE_ENVIRONMENTS.keys())[2])
+        st.session_state["cur_humidity_rh"] = int(item.get("humidity_rh", 85))
+        st.session_state["cur_storage_days"] = int(item.get("storage_days", 60))
+        st.session_state["cur_stacking"] = item.get("stacking_pattern", STACK_OPTIONS[0])
+        st.session_state["cur_overhang"] = bool(item.get("overhang", False))
+        st.session_state["cur_target_bct_m"] = float(item.get("target_bct_margin", 1.00))
+        st.session_state["cur_target_ect_m"] = float(item.get("target_ect_margin", 1.00))
+        st.session_state["cur_pallet_choice"] = item.get("pallet_choice", PALLET_OPTIONS[0])
+        st.session_state["cur_max_pallet_h"] = int(item.get("max_pallet_h", 1750))
+        st.session_state["cur_vehicle_choice"] = item.get("vehicle_choice", list(VEHICLE_DATABASE.keys())[0])
+        st.session_state["just_loaded_name"] = selected
+
 with st.sidebar:
     st.markdown("### 🏢 Okyanus Danışmanlık")
     st.caption("Geliştiren: **Dr. Murat Özdemir (Gıda Müh.)**")
@@ -868,50 +894,39 @@ with st.sidebar:
     st.header("📂 Kayıtlı Koliler / Reçeteler")
     saved_box_names = list(koli_db.keys())
 
-    selected_saved_box = st.selectbox(
-        "Kayıtlı Koli Seçin:",
+    # Açılır menü: Seçildiğinde veya Enter'a basıldığında anında tetiklenir
+    st.selectbox(
+        "Kayıtlı Koli Seçin (Enter ile Yüklenir):",
         ["-- Yeni Koli Formu --"] + saved_box_names,
-        key="selected_saved_box"
+        key="koli_selector",
+        on_change=on_koli_selection_change,
+        help="Bir koli seçtiğinizde veya klavyeden seçip Enter'a bastığınızda veriler otomatik forma doldurulur."
     )
+
+    if st.session_state.get("just_loaded_name"):
+        st.toast(f"✅ '{st.session_state['just_loaded_name']}' verileri yüklendi!", icon="📥")
+        del st.session_state["just_loaded_name"]
 
     btn_load_col, btn_del_col = st.columns([1, 1])
     with btn_load_col:
-        load_btn = st.button("📥 Yükle / Düzenle", use_container_width=True)
+        load_btn = st.button("📥 Yükle / Yenile", use_container_width=True)
     with btn_del_col:
         delete_btn = st.button("🗑️ Koliyi Sil", use_container_width=True)
 
-    if delete_btn and selected_saved_box != "-- Yeni Koli Formu --":
-        if selected_saved_box in koli_db:
-            del koli_db[selected_saved_box]
+    selected_choice = st.session_state.get("koli_selector", "-- Yeni Koli Formu --")
+
+    if delete_btn and selected_choice != "-- Yeni Koli Formu --":
+        if selected_choice in koli_db:
+            del koli_db[selected_choice]
             save_koli_database(koli_db)
-            st.success(f"'{selected_saved_box}' silindi!")
+            st.success(f"'{selected_choice}' silindi!")
             st.rerun()
 
-    if load_btn and selected_saved_box != "-- Yeni Koli Formu --":
-        loaded_item = koli_db[selected_saved_box]
-        st.session_state["cur_box_name"] = loaded_item.get("box_name", "")
-        st.session_state["cur_box_code"] = loaded_item.get("box_code", "")
-        st.session_state["cur_p_length"] = loaded_item.get("p_length", 250.0)
-        st.session_state["cur_p_width"] = loaded_item.get("p_width", 120.0)
-        st.session_state["cur_p_height"] = loaded_item.get("p_height", 150.0)
-        st.session_state["cur_p_weight"] = loaded_item.get("p_weight", 450.0)
-        st.session_state["cur_nx"] = loaded_item.get("nx", 5)
-        st.session_state["cur_ny"] = loaded_item.get("ny", 1)
-        st.session_state["cur_nz"] = loaded_item.get("nz", 2)
-        st.session_state["cur_env_choice"] = loaded_item.get("env_choice", list(STORAGE_ENVIRONMENTS.keys())[2])
-        st.session_state["cur_humidity_rh"] = loaded_item.get("humidity_rh", 85)
-        st.session_state["cur_storage_days"] = loaded_item.get("storage_days", 60)
-        st.session_state["cur_stacking"] = loaded_item.get("stacking_pattern", STACK_OPTIONS[0])
-        st.session_state["cur_overhang"] = loaded_item.get("overhang", False)
-        st.session_state["cur_target_bct_m"] = loaded_item.get("target_bct_margin", 1.00)
-        st.session_state["cur_target_ect_m"] = loaded_item.get("target_ect_margin", 1.00)
-        st.session_state["cur_pallet_choice"] = loaded_item.get("pallet_choice", PALLET_OPTIONS[0])
-        st.session_state["cur_max_pallet_h"] = loaded_item.get("max_pallet_h", 1750)
-        st.session_state["cur_vehicle_choice"] = loaded_item.get("vehicle_choice", list(VEHICLE_DATABASE.keys())[0])
-        st.success(f"'{selected_saved_box}' yüklendi!")
+    if load_btn and selected_choice != "-- Yeni Koli Formu --":
+        on_koli_selection_change()
         st.rerun()
 
-    # Form Varsayılan Değerleri
+    # Form Değerlerinin Çözümlenmesi
     def_name = st.session_state.get("cur_box_name", "Yöresel-1000g")
     def_code = st.session_state.get("cur_box_code", "KL-YOR-1000")
     def_l = st.session_state.get("cur_p_length", 250.0)
@@ -996,7 +1011,30 @@ with st.sidebar:
     )
 
     st.divider()
-    # KAYDETME BUTONU
+
+    # --- YEŞİL KAYDET / GÜNCELLE BUTONU (ÖZEL CSS İLE) ---
+    st.markdown("""
+        <style>
+        div[data-testid="stSidebar"] button[kind="primary"] {
+            background-color: #2e7d32 !important;
+            border-color: #1b5e20 !important;
+            color: #ffffff !important;
+            font-weight: bold !important;
+            box-shadow: 0 4px 6px rgba(46, 125, 50, 0.3) !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        div[data-testid="stSidebar"] button[kind="primary"]:hover {
+            background-color: #1b5e20 !important;
+            border-color: #0d3810 !important;
+            transform: scale(1.02) !important;
+        }
+        div[data-testid="stSidebar"] button[kind="primary"]:active {
+            background-color: #0d3810 !important;
+            transform: scale(0.98) !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     save_koli_btn = st.button("💾 Koliyi Kaydet / Güncelle", type="primary", use_container_width=True)
     if save_koli_btn:
         save_key = box_name_input.strip() if box_name_input.strip() else f"Koli_{datetime.now().strftime('%Y%m%d_%H%M')}"
@@ -1023,7 +1061,11 @@ with st.sidebar:
             "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M')
         }
         save_koli_database(koli_db)
-        st.success(f"'{save_key}' başarıyla kaydedildi!")
+        st.session_state["cur_box_name"] = box_name_input
+        st.session_state["cur_box_code"] = box_code_input
+        st.session_state["koli_selector"] = save_key
+        st.toast(f"✅ '{save_key}' başarıyla kaydedildi!", icon="💾")
+        st.success(f"✔️ **'{save_key}'** veritabanına kaydedildi!")
         st.rerun()
 
     st.caption("© 2026 Okyanus Danışmanlık\nDr. Murat Özdemir (Gıda Müh.)")
