@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Otomatik Enter/Seçim Yüklemeli & Yeşil Butonlu)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Streamlit State Hatası Düzeltilmiş)
 """
 
 import streamlit as st
@@ -523,7 +523,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (ÜRÜN KİMLİK BİLGİLERİ EKLENMİŞ) ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, target_bct_m, target_ect_m):
     buf = io.BytesIO()
@@ -859,31 +859,33 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
 
 koli_db = load_koli_database()
 
-# Otomatik Yükleme Fonksiyonu (Selectbox değiştiğinde veya Enter'a basıldığında çalışır)
+# Yükleme / Değişim Callback Fonksiyonu
+def apply_loaded_koli(item, selected_key):
+    st.session_state["cur_box_name"] = item.get("box_name", "")
+    st.session_state["cur_box_code"] = item.get("box_code", "")
+    st.session_state["cur_p_length"] = float(item.get("p_length", 250.0))
+    st.session_state["cur_p_width"] = float(item.get("p_width", 120.0))
+    st.session_state["cur_p_height"] = float(item.get("p_height", 150.0))
+    st.session_state["cur_p_weight"] = float(item.get("p_weight", 450.0))
+    st.session_state["cur_nx"] = int(item.get("nx", 5))
+    st.session_state["cur_ny"] = int(item.get("ny", 1))
+    st.session_state["cur_nz"] = int(item.get("nz", 2))
+    st.session_state["cur_env_choice"] = item.get("env_choice", list(STORAGE_ENVIRONMENTS.keys())[2])
+    st.session_state["cur_humidity_rh"] = int(item.get("humidity_rh", 85))
+    st.session_state["cur_storage_days"] = int(item.get("storage_days", 60))
+    st.session_state["cur_stacking"] = item.get("stacking_pattern", STACK_OPTIONS[0])
+    st.session_state["cur_overhang"] = bool(item.get("overhang", False))
+    st.session_state["cur_target_bct_m"] = float(item.get("target_bct_margin", 1.00))
+    st.session_state["cur_target_ect_m"] = float(item.get("target_ect_margin", 1.00))
+    st.session_state["cur_pallet_choice"] = item.get("pallet_choice", PALLET_OPTIONS[0])
+    st.session_state["cur_max_pallet_h"] = int(item.get("max_pallet_h", 1750))
+    st.session_state["cur_vehicle_choice"] = item.get("vehicle_choice", list(VEHICLE_DATABASE.keys())[0])
+    st.session_state["just_loaded_name"] = selected_key
+
 def on_koli_selection_change():
     selected = st.session_state.get("koli_selector")
     if selected and selected != "-- Yeni Koli Formu --" and selected in koli_db:
-        item = koli_db[selected]
-        st.session_state["cur_box_name"] = item.get("box_name", "")
-        st.session_state["cur_box_code"] = item.get("box_code", "")
-        st.session_state["cur_p_length"] = float(item.get("p_length", 250.0))
-        st.session_state["cur_p_width"] = float(item.get("p_width", 120.0))
-        st.session_state["cur_p_height"] = float(item.get("p_height", 150.0))
-        st.session_state["cur_p_weight"] = float(item.get("p_weight", 450.0))
-        st.session_state["cur_nx"] = int(item.get("nx", 5))
-        st.session_state["cur_ny"] = int(item.get("ny", 1))
-        st.session_state["cur_nz"] = int(item.get("nz", 2))
-        st.session_state["cur_env_choice"] = item.get("env_choice", list(STORAGE_ENVIRONMENTS.keys())[2])
-        st.session_state["cur_humidity_rh"] = int(item.get("humidity_rh", 85))
-        st.session_state["cur_storage_days"] = int(item.get("storage_days", 60))
-        st.session_state["cur_stacking"] = item.get("stacking_pattern", STACK_OPTIONS[0])
-        st.session_state["cur_overhang"] = bool(item.get("overhang", False))
-        st.session_state["cur_target_bct_m"] = float(item.get("target_bct_margin", 1.00))
-        st.session_state["cur_target_ect_m"] = float(item.get("target_ect_margin", 1.00))
-        st.session_state["cur_pallet_choice"] = item.get("pallet_choice", PALLET_OPTIONS[0])
-        st.session_state["cur_max_pallet_h"] = int(item.get("max_pallet_h", 1750))
-        st.session_state["cur_vehicle_choice"] = item.get("vehicle_choice", list(VEHICLE_DATABASE.keys())[0])
-        st.session_state["just_loaded_name"] = selected
+        apply_loaded_koli(koli_db[selected], selected)
 
 with st.sidebar:
     st.markdown("### 🏢 Okyanus Danışmanlık")
@@ -893,14 +895,21 @@ with st.sidebar:
     # --- REÇETE / KOLİ VERİTABANI MODÜLÜ ---
     st.header("📂 Kayıtlı Koliler / Reçeteler")
     saved_box_names = list(koli_db.keys())
+    selector_options = ["-- Yeni Koli Formu --"] + saved_box_names
 
-    # Açılır menü: Seçildiğinde veya Enter'a basıldığında anında tetiklenir
-    st.selectbox(
+    # Yeni kaydedilen koli varsa indexini bul ve aktif yap (StreamlitWidgetAlreadyInstantiatedError önleyici)
+    default_selector_idx = 0
+    pending_sel = st.session_state.pop("pending_koli_selection", None)
+    if pending_sel and pending_sel in selector_options:
+        default_selector_idx = selector_options.index(pending_sel)
+
+    selected_choice = st.selectbox(
         "Kayıtlı Koli Seçin (Enter ile Yüklenir):",
-        ["-- Yeni Koli Formu --"] + saved_box_names,
+        selector_options,
+        index=default_selector_idx,
         key="koli_selector",
         on_change=on_koli_selection_change,
-        help="Bir koli seçtiğinizde veya klavyeden seçip Enter'a bastığınızda veriler otomatik forma doldurulur."
+        help="Bir koli seçtiğinizde veya klavyeden seçip Enter'a bastığınızda veriler otomatik olarak forma yüklenir."
     )
 
     if st.session_state.get("just_loaded_name"):
@@ -913,8 +922,6 @@ with st.sidebar:
     with btn_del_col:
         delete_btn = st.button("🗑️ Koliyi Sil", use_container_width=True)
 
-    selected_choice = st.session_state.get("koli_selector", "-- Yeni Koli Formu --")
-
     if delete_btn and selected_choice != "-- Yeni Koli Formu --":
         if selected_choice in koli_db:
             del koli_db[selected_choice]
@@ -923,8 +930,9 @@ with st.sidebar:
             st.rerun()
 
     if load_btn and selected_choice != "-- Yeni Koli Formu --":
-        on_koli_selection_change()
-        st.rerun()
+        if selected_choice in koli_db:
+            apply_loaded_koli(koli_db[selected_choice], selected_choice)
+            st.rerun()
 
     # Form Değerlerinin Çözümlenmesi
     def_name = st.session_state.get("cur_box_name", "Yöresel-1000g")
@@ -1063,7 +1071,8 @@ with st.sidebar:
         save_koli_database(koli_db)
         st.session_state["cur_box_name"] = box_name_input
         st.session_state["cur_box_code"] = box_code_input
-        st.session_state["koli_selector"] = save_key
+        # Güvenli seçim bayrağı: Doğrudan widget key'e yazmak yerine pending değişkeniyle rerun edilir
+        st.session_state["pending_koli_selection"] = save_key
         st.toast(f"✅ '{save_key}' başarıyla kaydedildi!", icon="💾")
         st.success(f"✔️ **'{save_key}'** veritabanına kaydedildi!")
         st.rerun()
@@ -1115,12 +1124,14 @@ for key, bdata in BOARD_DATABASE.items():
     target_bct_n = target_required_bct_kgf * 9.80665
     req_min_ect = target_bct_n / (5.87 * math.sqrt(caliper * perimeter)) if (caliper * perimeter) > 0 else 0
     
+    # Parametrik Güvenlik Payı Kriterleri
     req_spec_bct_kgf = target_required_bct_kgf * target_bct_margin
     req_spec_ect_kn_m = req_min_ect * target_ect_margin
     
     bct_safety_margin = actual_bct_kgf / target_required_bct_kgf if target_required_bct_kgf > 0 else 999.0
     ect_safety_margin = ect / req_min_ect if req_min_ect > 0 else 999.0
     
+    # Hem BCT hem ECT hedef güvenlik payını sağlamalıdır
     is_safe = (bct_safety_margin >= target_bct_margin) and (ect_safety_margin >= target_ect_margin)
     
     eval_item = {
