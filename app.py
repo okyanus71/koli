@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Şartnamede 2B ve 3B Koli Dizilimli)
 """
 
 import streamlit as st
@@ -18,7 +18,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.shapes import Drawing, Rect, Polygon, Line, String
 
 st.set_page_config(
     page_title="Koli Mukavemet & Lojistik - Okyanus Danışmanlık",
@@ -365,7 +365,95 @@ def draw_3d_vehicle_layout(v_len, v_wid, v_h, is_palletized, p_len, p_wid, p_tot
     )
     return fig
 
-# --- PDF İÇİN VEKTÖREL ÇİZİMLER ---
+# --- PDF İÇİN ÇİZİM VE GÜVENLİ METİN DÖNÜŞTÜRÜCÜSÜ ---
+
+def safe_pdf_str(text):
+    """ReportLab font motorunda siyah kutu (■) basılmasını önleyen tam ASCII/Latin eşleme"""
+    if not isinstance(text, str):
+        text = str(text)
+    mapping = {
+        'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S',
+        'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U',
+        'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
+    }
+    for k, v in mapping.items():
+        text = text.replace(k, v)
+    return text
+
+def pdf_draw_box_2d(box_in_l, box_in_w, p_len, p_wid, nx, ny, width=240, height=95):
+    """Şartname için 2B Koli İçi Kat Planı"""
+    d = Drawing(width, height)
+    scale = min((width - 16) / box_in_l, (height - 16) / box_in_w)
+    bw = box_in_l * scale
+    bh = box_in_w * scale
+    x_off = (width - bw) / 2
+    y_off = (height - bh) / 2
+    d.add(Rect(x_off, y_off, bw, bh, fillColor=colors.HexColor('#fbf0e4'), strokeColor=colors.HexColor('#8c564b'), strokeWidth=1.0))
+    cnt = 1
+    for i in range(nx):
+        for j in range(ny):
+            rx = x_off + i * p_len * scale
+            ry = y_off + j * p_wid * scale
+            rw = p_len * scale
+            rh = p_wid * scale
+            d.add(Rect(rx, ry, rw, rh, fillColor=colors.HexColor('#74c476'), strokeColor=colors.HexColor('#2ca02c'), strokeWidth=0.6))
+            d.add(String(rx + rw/2 - 3, ry + rh/2 - 3, str(cnt), fontName="Helvetica", fontSize=5.5, fillColor=colors.white))
+            cnt += 1
+    return d
+
+def pdf_draw_box_3d_iso(box_in_l, box_in_w, box_in_h, p_len, p_wid, p_h, nx, ny, nz, width=240, height=95):
+    """Şartname için 3B İzometrik Koli İçi Paketleme Şeması"""
+    d = Drawing(width, height)
+    iso_s = min(0.11, (height - 20) / (box_in_h + (box_in_l + box_in_w) * 0.45 * math.sin(math.radians(30)) + 30))
+    ox = width / 2 - (box_in_l - box_in_w) * 0.5 * math.cos(math.radians(30)) * iso_s
+    oy = 12
+
+    def proj(x, y, z):
+        px = ox + (x - y) * math.cos(math.radians(30)) * iso_s
+        py = oy + (x + y) * math.sin(math.radians(30)) * iso_s + z * iso_s
+        return px, py
+
+    v_box = [
+        proj(0, 0, 0), proj(box_in_l, 0, 0), proj(box_in_l, box_in_w, 0), proj(0, box_in_w, 0),
+        proj(0, 0, box_in_h), proj(box_in_l, 0, box_in_h), proj(box_in_l, box_in_w, box_in_h), proj(0, box_in_w, box_in_h)
+    ]
+    # Koli tabanı
+    d.add(Polygon([v_box[0][0], v_box[0][1], v_box[1][0], v_box[1][1], v_box[2][0], v_box[2][1], v_box[3][0], v_box[3][1]],
+                  fillColor=colors.HexColor('#f5ede3'), strokeColor=colors.HexColor('#a1887f'), strokeWidth=0.8))
+
+    # Koli içi ürün blokları
+    for k in range(nz):
+        z0 = k * p_h
+        c_top = colors.HexColor('#a1d99b') if k % 2 == 0 else colors.HexColor('#74c476')
+        c_s1 = colors.HexColor('#41ab5d') if k % 2 == 0 else colors.HexColor('#238b45')
+        c_s2 = colors.HexColor('#238b45') if k % 2 == 0 else colors.HexColor('#005a32')
+        for i in range(nx):
+            for j in range(ny):
+                x0 = i * p_len
+                y0 = j * p_wid
+                dx = p_len - 1
+                dy = p_wid - 1
+                dz = p_h - 1
+                v = [
+                    proj(x0, y0, z0), proj(x0+dx, y0, z0), proj(x0+dx, y0+dy, z0), proj(x0, y0+dy, z0),
+                    proj(x0, y0, z0+dz), proj(x0+dx, y0, z0+dz), proj(x0+dx, y0+dy, z0+dz), proj(x0, y0+dy, z0+dz)
+                ]
+                d.add(Polygon([v[4][0], v[4][1], v[5][0], v[5][1], v[6][0], v[6][1], v[7][0], v[7][1]],
+                              fillColor=c_top, strokeColor=colors.HexColor('#1b4d1b'), strokeWidth=0.3))
+                d.add(Polygon([v[1][0], v[1][1], v[2][0], v[2][1], v[6][0], v[6][1], v[5][0], v[5][1]],
+                              fillColor=c_s1, strokeColor=colors.HexColor('#1b4d1b'), strokeWidth=0.3))
+                d.add(Polygon([v[0][0], v[0][1], v[1][0], v[1][1], v[5][0], v[5][1], v[4][0], v[4][1]],
+                              fillColor=c_s2, strokeColor=colors.HexColor('#1b4d1b'), strokeWidth=0.3))
+
+    # Koli dış tel kafes çizgileri
+    d.add(Line(v_box[0][0], v_box[0][1], v_box[4][0], v_box[4][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    d.add(Line(v_box[1][0], v_box[1][1], v_box[5][0], v_box[5][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    d.add(Line(v_box[2][0], v_box[2][1], v_box[6][0], v_box[6][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    d.add(Line(v_box[4][0], v_box[4][1], v_box[5][0], v_box[5][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    d.add(Line(v_box[5][0], v_box[5][1], v_box[6][0], v_box[6][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    d.add(Line(v_box[6][0], v_box[6][1], v_box[7][0], v_box[7][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    d.add(Line(v_box[7][0], v_box[7][1], v_box[4][0], v_box[4][1], strokeColor=colors.HexColor('#8c564b'), strokeWidth=0.8))
+    return d
 
 def pdf_draw_pallet_2d(pallet_l, pallet_w, coords, width=240, height=95):
     d = Drawing(width, height)
@@ -408,20 +496,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-def safe_pdf_str(text):
-    """ReportLab font motorunda siyah kutu (■) basmasını önleyen güvenli metin dönüştürücü"""
-    if not isinstance(text, str):
-        text = str(text)
-    mapping = {
-        'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S',
-        'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U',
-        'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
-    }
-    for k, v in mapping.items():
-        text = text.replace(k, v)
-    return text
-
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (ÜRÜN BİLGİLERİ EKLENMİŞ) ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (ÜRÜN KİMLİK BİLGİLERİ EKLENMİŞ) ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, target_bct_m, target_ect_m):
     buf = io.BytesIO()
@@ -435,11 +510,11 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
 
     elements = []
     elements.append(Paragraph(safe_pdf_str("GIDA AMBALAJI KOLI MUKAVEMET VE LOJISTIK RAPORU"), title_style))
-    elements.append(Paragraph(safe_pdf_str("Hazırlayan: Okyanus Danismanlik - Dr. Murat Ozdemir (Gida Muh.)"), author_style))
+    elements.append(Paragraph(safe_pdf_str("Hazirlayan: Okyanus Danismanlik - Dr. Murat Ozdemir (Gida Muh.)"), author_style))
     elements.append(Paragraph(safe_pdf_str(f"Rapor Tarihi: {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ParagraphStyle('DateStyle', parent=normal_style, alignment=1, textColor=colors.gray)))
     elements.append(Spacer(1, 4))
 
-    # 1. Ürün ve Ambalaj Kimlik Bilgileri (GÖRSELDEKİ FORMATTA ZENGİN TABLO)
+    # 1. Ürün ve Ambalaj Kimlik Bilgileri (ZENGİN TABLO)
     elements.append(Paragraph(safe_pdf_str("1. Urun ve Ambalaj Kimlik Bilgileri"), h2_style))
     name_str = prod_info.get('box_name', '').strip() or "Standart Gida Kolisi"
     code_str = prod_info.get('box_code', '').strip() or "BELIRTILMEDI"
@@ -602,16 +677,16 @@ def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, palle
     buf.seek(0)
     return buf.getvalue()
 
-# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ ---
+# --- PDF 2: TEKNİK SATINALMA ŞARTNAMESİ ÜRETİCİSİ (2B VE 3B ŞEMALAR ENTEGRELİ) ---
 
 def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, target_ect_m):
     """Tedarikçiye verilmek üzere resmi Koli Satınalma Teknik Şartnamesi PDF'i üretir"""
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=25, bottomMargin=25)
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=25, leftMargin=25, topMargin=20, bottomMargin=20)
     styles = getSampleStyleSheet()
     
     title_style = ParagraphStyle('SpecTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=13, leading=16, textColor=colors.HexColor('#003366'), alignment=1)
-    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=9.5, leading=12, textColor=colors.HexColor('#1f77b4'), spaceBefore=6, spaceAfter=2)
+    sec_title = ParagraphStyle('SpecSec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=9.5, leading=12, textColor=colors.HexColor('#1f77b4'), spaceBefore=5, spaceAfter=2)
     normal = ParagraphStyle('SpecNorm', parent=styles['Normal'], fontName='Helvetica', fontSize=7.5, leading=10)
     bold = ParagraphStyle('SpecBld', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=7.5, leading=10)
 
@@ -624,7 +699,7 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     elements = []
     elements.append(Paragraph(safe_pdf_str("OLUKLU MUKAVVA KOLI TEKNIK SATINALMA SARTNAMESI"), title_style))
     elements.append(Paragraph(safe_pdf_str(f"Dokuman No: SPEC-BOX-{datetime.now().strftime('%Y%m%d')} | Revizyon: 01 | Tarih: {datetime.now().strftime('%d.%m.%Y')}"), ParagraphStyle('DocNo', parent=normal, alignment=1, textColor=colors.gray)))
-    elements.append(Spacer(1, 6))
+    elements.append(Spacer(1, 5))
 
     # 1. Genel Bilgiler
     elements.append(Paragraph(safe_pdf_str("1. Urun ve Ambalaj Kimlik Bilgileri"), sec_title))
@@ -634,7 +709,7 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
         [Paragraph(safe_pdf_str("<b>Koli / Urun Tanimi:</b>"), normal), Paragraph(safe_pdf_str(name_str), normal), Paragraph(safe_pdf_str("<b>Koli Kodu / SKU:</b>"), normal), Paragraph(safe_pdf_str(code_str), normal)],
         [Paragraph(safe_pdf_str("<b>Koli Tipi (Standart):</b>"), normal), Paragraph(safe_pdf_str("FEFCO 0201 (Standart Yarik Ackili)"), normal), Paragraph(safe_pdf_str("<b>Baski / Renk:</b>"), normal), Paragraph(safe_pdf_str("Flekso Baski (Onayli Klise)"), normal)],
         [Paragraph(safe_pdf_str("<b>Birlestirme Yontemi:</b>"), normal), Paragraph(safe_pdf_str("Tutkalli / Sicak Yapistirma (Hot-melt)"), normal), Paragraph(safe_pdf_str("<b>Gida Temas Uygunlugu:</b>"), normal), Paragraph(safe_pdf_str("Uygun (Ikincil Dis Ambalaj)"), normal)]
-    ], colWidths=[120, 145, 120, 150])
+    ], colWidths=[120, 150, 120, 150])
     t_id.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8f9fa')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dee2e6')),
@@ -652,7 +727,7 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
         [Paragraph(safe_pdf_str("Dis Olculer (L x W x H)"), normal), Paragraph(f"{int(b_out[0])} x {int(b_out[1])} x {int(b_out[2])} mm", normal), "± 3.0 mm", Paragraph(safe_pdf_str("Lojistik / paletleme dis siniri"), normal)],
         [Paragraph(safe_pdf_str("Mukavva Kalinligi (Caliper)"), normal), Paragraph(f"{active_eval['caliper']:.1f} mm", normal), "± 0.2 mm", Paragraph(safe_pdf_str(f"{b_data['flute']} Dalga Profili"), normal)],
         [Paragraph(safe_pdf_str("Koli Bos Agirligi (Dara)"), normal), Paragraph(f"~{active_eval['gross_koli_kg'] - prod_info['net_kg']:.3f} kg", normal), "± %5", Paragraph(safe_pdf_str("Gramaja bagli teorik dara"), normal)]
-    ], colWidths=[140, 125, 80, 190])
+    ], colWidths=[140, 125, 80, 195])
     t_dim.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f77b4')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -663,8 +738,30 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     ]))
     elements.append(t_dim)
 
-    # 3. Mukavemet & Hammadde Kalite Kriterleri
-    elements.append(Paragraph(safe_pdf_str("3. Mukavemet, Test ve Kabul Kriterleri (Tedarikci Test Barajlari)"), sec_title))
+    # 3. Koli İçi Paketleme Şeması (2B ve 3B GÖRSELİZASYON)
+    elements.append(Paragraph(safe_pdf_str("3. Koli Ici Urun Paketleme Semasi (2B ve 3B)"), sec_title))
+    d_box_2d = pdf_draw_box_2d(box_in_l, box_in_w, prod_info['l'], prod_info['w'], prod_info['nx'], prod_info['ny'], width=255, height=95)
+    d_box_3d = pdf_draw_box_3d_iso(box_in_l, box_in_w, box_in_h, prod_info['l'], prod_info['w'], prod_info['h'], prod_info['nx'], prod_info['ny'], prod_info['nz'], width=255, height=95)
+
+    t_box_draw = Table([
+        [
+            Paragraph(safe_pdf_str(f"<b>2B Taban Yerlesim Plani ({prod_info['nx']}x{prod_info['ny']} Urun)</b>"), normal),
+            Paragraph(safe_pdf_str(f"<b>3B Izometrik Koli Ici Paketi ({prod_info['units']} Urun / {prod_info['nz']} Kat)</b>"), normal)
+        ],
+        [d_box_2d, d_box_3d]
+    ], colWidths=[270, 270])
+    t_box_draw.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#fafafa')),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('TOPPADDING', (0,0), (-1,-1), 2),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+    ]))
+    elements.append(t_box_draw)
+    elements.append(Spacer(1, 4))
+
+    # 4. Mukavemet & Hammadde Kalite Kriterleri
+    elements.append(Paragraph(safe_pdf_str("4. Mukavemet, Test ve Kabul Kriterleri (Tedarikci Test Barajlari)"), sec_title))
     t_str = Table([
         [Paragraph(safe_pdf_str("<b>Mekanik Test Parametresi</b>"), bold), Paragraph(safe_pdf_str("<b>Zorunlu Kabul Kriteri</b>"), bold), Paragraph(safe_pdf_str("<b>Test Standardi</b>"), bold)],
         [
@@ -692,19 +789,19 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
             Paragraph(safe_pdf_str(f"{b_data.get('paper_combination', 'Tedarikci Standart')}"), normal),
             Paragraph("ISO 536", normal)
         ]
-    ], colWidths=[160, 225, 150])
+    ], colWidths=[160, 230, 150])
     t_str.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#003366')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 2.2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2.2)
+        ('TOPPADDING', (0,0), (-1,-1), 2.0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2.0)
     ]))
     elements.append(t_str)
 
-    # 4. Kalite Kabul ve Sevk Şartları
-    elements.append(Paragraph(safe_pdf_str("4. Kalite Kontrol, Kabul ve Sevk Kriterleri"), sec_title))
+    # 5. Kalite Kabul ve Sevk Şartları
+    elements.append(Paragraph(safe_pdf_str("5. Kalite Kontrol, Kabul ve Sevk Kriterleri"), sec_title))
     criteria_text = safe_pdf_str("""
     • <b>Nem Orani:</b> Teslimat aninda mukavva rutubeti <b>%7 - %9</b> araliginda olmalidir. %10 uzeri partiler mukavemet zaafiyeti nedeniyle reddedilir.<br/>
     • <b>Pilyaj ve Katlama Cizgileri:</b> Koli katlama izleri pilyaj kiriminda catlama ve yirtilma yapmamali, otomatik koli kurma hatlarina uygun olmalidir.<br/>
@@ -712,13 +809,13 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
     • <b>Parti Uygunlugu:</b> Tedarikci, her sevk partisiyle birlikte ilgili lota ait <b>Kalite Test Raporunu</b> ibraz etmekle yukumludur.
     """)
     elements.append(Paragraph(criteria_text, normal))
-    elements.append(Spacer(1, 8))
+    elements.append(Spacer(1, 6))
 
     # Tedarikçi Taahhüt Alanı
     t_sign = Table([
-        [Paragraph(safe_pdf_str("<b>TEDARIKCI FIRMA TAAHHUTNAMESI</b><br/>Yukaridaki teknik sartlari eksiksiz kabul ederiz."), normal)],
+        [Paragraph(safe_pdf_str("<b>TEDARIKCI FIRMA TAAHHUTNAMESI</b><br/>Yukaridaki teknik sartlari ve ekteki dizilim semalarini eksiksiz kabul ederiz."), normal)],
         [Paragraph("<br/><br/>Yetkili Imza / Kase:<br/>Tarih:", normal)]
-    ], colWidths=[530])
+    ], colWidths=[540])
     t_sign.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#888888')),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cccccc')),
@@ -763,7 +860,6 @@ with st.sidebar:
     active_stacking = st.selectbox("İstif Deseni", STACK_OPTIONS, index=0)
     overhang = st.checkbox("Paletten Taşma (Overhang) Riski Var", value=False)
 
-    # PARAMETRİK BCT VE ECT GÜVENLİK PAYI GİRDİLERİ
     st.subheader("🛡️ Parametrik Güvenlik Payları")
     target_bct_margin = st.slider(
         "Hedef BCT Güvenlik Payı (Kutu Ezilme)",
@@ -843,14 +939,12 @@ for key, bdata in BOARD_DATABASE.items():
     target_bct_n = target_required_bct_kgf * 9.80665
     req_min_ect = target_bct_n / (5.87 * math.sqrt(caliper * perimeter)) if (caliper * perimeter) > 0 else 0
     
-    # Parametrik Güvenlik Payı Kriterleri
     req_spec_bct_kgf = target_required_bct_kgf * target_bct_margin
     req_spec_ect_kn_m = req_min_ect * target_ect_margin
     
     bct_safety_margin = actual_bct_kgf / target_required_bct_kgf if target_required_bct_kgf > 0 else 999.0
     ect_safety_margin = ect / req_min_ect if req_min_ect > 0 else 999.0
     
-    # Hem BCT hem ECT hedef güvenlik payını sağlamalıdır
     is_safe = (bct_safety_margin >= target_bct_margin) and (ect_safety_margin >= target_ect_margin)
     
     eval_item = {
