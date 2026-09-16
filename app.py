@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Streamlit State Hatası Düzeltilmiş)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
 """
 
 import streamlit as st
@@ -897,7 +897,6 @@ with st.sidebar:
     saved_box_names = list(koli_db.keys())
     selector_options = ["-- Yeni Koli Formu --"] + saved_box_names
 
-    # Yeni kaydedilen koli varsa indexini bul ve aktif yap (StreamlitWidgetAlreadyInstantiatedError önleyici)
     default_selector_idx = 0
     pending_sel = st.session_state.pop("pending_koli_selection", None)
     if pending_sel and pending_sel in selector_options:
@@ -1071,7 +1070,6 @@ with st.sidebar:
         save_koli_database(koli_db)
         st.session_state["cur_box_name"] = box_name_input
         st.session_state["cur_box_code"] = box_code_input
-        # Güvenli seçim bayrağı: Doğrudan widget key'e yazmak yerine pending değişkeniyle rerun edilir
         st.session_state["pending_koli_selection"] = save_key
         st.toast(f"✅ '{save_key}' başarıyla kaydedildi!", icon="💾")
         st.success(f"✔️ **'{save_key}'** veritabanına kaydedildi!")
@@ -1131,7 +1129,6 @@ for key, bdata in BOARD_DATABASE.items():
     bct_safety_margin = actual_bct_kgf / target_required_bct_kgf if target_required_bct_kgf > 0 else 999.0
     ect_safety_margin = ect / req_min_ect if req_min_ect > 0 else 999.0
     
-    # Hem BCT hem ECT hedef güvenlik payını sağlamalıdır
     is_safe = (bct_safety_margin >= target_bct_margin) and (ect_safety_margin >= target_ect_margin)
     
     eval_item = {
