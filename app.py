@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Kesin Yeşil Buton & Kalıcı CRUD Entegrasyonlu)
 """
 
 import streamlit as st
@@ -28,6 +28,38 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# --- GLOBAL BUTON YEŞİL TEMA CSS ENJEKSİYONU ---
+st.markdown("""
+<style>
+/* Sidebar içindeki Kaydet / Güncelle butonunu kesinlikle yeşil yap */
+[data-testid="stSidebar"] div.stButton > button:first-child {
+    background-color: #2e7d32 !important;
+    background-image: linear-gradient(180deg, #388e3c, #2e7d32) !important;
+    border: 1px solid #1b5e20 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 1rem !important;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16) !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+[data-testid="stSidebar"] div.stButton > button:first-child:hover {
+    background-color: #1b5e20 !important;
+    background-image: linear-gradient(180deg, #2e7d32, #1b5e20) !important;
+    border-color: #0d3810 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25) !important;
+    transform: translateY(-1px) !important;
+}
+
+[data-testid="stSidebar"] div.stButton > button:first-child:active {
+    background-color: #0d3810 !important;
+    transform: translateY(1px) !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 DB_FILE = "koli_database.json"
 
@@ -523,7 +555,7 @@ def pdf_draw_vehicle_2d(v_len, v_wid, p_len, p_wid, is_pal, total_pallets, width
                     cnt += 1
     return d
 
-# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ (ÜRÜN KİMLİK BİLGİLERİ EKLENMİŞ) ---
+# --- PDF 1: SONUÇ RAPORU ÜRETİCİSİ ---
 
 def generate_pdf_report(prod_info, storage_info, active_eval, board_evals, pallet_info, vehicle_info, target_bct_m, target_ect_m):
     buf = io.BytesIO()
@@ -1019,29 +1051,7 @@ with st.sidebar:
 
     st.divider()
 
-    # --- YEŞİL KAYDET / GÜNCELLE BUTONU (ÖZEL CSS İLE) ---
-    st.markdown("""
-        <style>
-        div[data-testid="stSidebar"] button[kind="primary"] {
-            background-color: #2e7d32 !important;
-            border-color: #1b5e20 !important;
-            color: #ffffff !important;
-            font-weight: bold !important;
-            box-shadow: 0 4px 6px rgba(46, 125, 50, 0.3) !important;
-            transition: all 0.2s ease-in-out !important;
-        }
-        div[data-testid="stSidebar"] button[kind="primary"]:hover {
-            background-color: #1b5e20 !important;
-            border-color: #0d3810 !important;
-            transform: scale(1.02) !important;
-        }
-        div[data-testid="stSidebar"] button[kind="primary"]:active {
-            background-color: #0d3810 !important;
-            transform: scale(0.98) !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
+    # --- YEŞİL KAYDET / GÜNCELLE BUTONU ---
     save_koli_btn = st.button("💾 Koliyi Kaydet / Güncelle", type="primary", use_container_width=True)
     if save_koli_btn:
         save_key = box_name_input.strip() if box_name_input.strip() else f"Koli_{datetime.now().strftime('%Y%m%d_%H%M')}"
