@@ -1,7 +1,7 @@
 """
 Gıda Ambalajı Koli Mukavemet Mühendisliği & Lojistik Optimizatörü
 Geliştiren: Okyanus Danışmanlık - Dr. Murat Özdemir (Gıda Müh.)
-Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Kesin Yeşil Buton & Kalıcı CRUD Entegrasyonlu)
+Platform: Python + Streamlit + Plotly 2B/3B + ReportLab PDF (Ortak Koli Geliştirme Modüllü)
 """
 
 import streamlit as st
@@ -32,7 +32,7 @@ st.set_page_config(
 # --- GLOBAL BUTON YEŞİL TEMA CSS ENJEKSİYONU ---
 st.markdown("""
 <style>
-/* Sidebar içindeki Kaydet / Güncelle butonunu kesinlikle yeşil yap */
+/* Sidebar içindeki Kaydet / Güncelle butonunu yeşil yap */
 [data-testid="stSidebar"] div.stButton > button:first-child {
     background-color: #2e7d32 !important;
     background-image: linear-gradient(180deg, #388e3c, #2e7d32) !important;
@@ -52,11 +52,6 @@ st.markdown("""
     color: #ffffff !important;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25) !important;
     transform: translateY(-1px) !important;
-}
-
-[data-testid="stSidebar"] div.stButton > button:first-child:active {
-    background-color: #0d3810 !important;
-    transform: translateY(1px) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -891,7 +886,6 @@ def generate_box_spec_pdf(prod_info, storage_info, active_eval, target_bct_m, ta
 
 koli_db = load_koli_database()
 
-# Yükleme / Değişim Callback Fonksiyonu
 def apply_loaded_koli(item, selected_key):
     st.session_state["cur_box_name"] = item.get("box_name", "")
     st.session_state["cur_box_code"] = item.get("box_code", "")
@@ -1132,7 +1126,6 @@ for key, bdata in BOARD_DATABASE.items():
     target_bct_n = target_required_bct_kgf * 9.80665
     req_min_ect = target_bct_n / (5.87 * math.sqrt(caliper * perimeter)) if (caliper * perimeter) > 0 else 0
     
-    # Parametrik Güvenlik Payı Kriterleri
     req_spec_bct_kgf = target_required_bct_kgf * target_bct_margin
     req_spec_ect_kn_m = req_min_ect * target_ect_margin
     
@@ -1286,7 +1279,7 @@ st.divider()
 cur_step = st.session_state["active_step"]
 
 st.markdown("### 🧭 Analiz ve Optimizasyon Adımları")
-nav_col1, nav_col2, nav_col3 = st.columns(3)
+nav_col1, nav_col2, nav_col3, nav_col4 = st.columns(4)
 
 with nav_col1:
     btn_type1 = "primary" if cur_step == 1 else "secondary"
@@ -1301,7 +1294,7 @@ with nav_col1:
     if cur_step == 1:
         st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Ezilme Dayanımı & Satınalma Şartnamesi</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Ezilme & Şartname</div>", unsafe_allow_html=True)
 
 with nav_col2:
     btn_type2 = "primary" if cur_step == 2 else "secondary"
@@ -1316,7 +1309,7 @@ with nav_col2:
     if cur_step == 2:
         st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Koli İçi & Palet 2B/3B</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Koli & Palet Simülasyonu</div>", unsafe_allow_html=True)
 
 with nav_col3:
     btn_type3 = "primary" if cur_step == 3 else "secondary"
@@ -1331,9 +1324,24 @@ with nav_col3:
     if cur_step == 3:
         st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Paletli vs. Dökme Yükleme</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Lojistik Doluluk</div>", unsafe_allow_html=True)
 
-progress_val = {1: 0.33, 2: 0.66, 3: 1.0}[cur_step]
+with nav_col4:
+    btn_type4 = "primary" if cur_step == 4 else "secondary"
+    st.button(
+        "🔄 **4. ADIM:** Ortak Koli Modülü",
+        key="nav_step_4",
+        type=btn_type4,
+        use_container_width=True,
+        on_click=set_step,
+        args=(4,)
+    )
+    if cur_step == 4:
+        st.markdown("<div style='text-align:center; color:#1f77b4; font-weight:bold;'>📍 Şu an Buradasınız</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align:center; color:gray; font-size:0.8rem;'>Standardizasyon & Dolgu</div>", unsafe_allow_html=True)
+
+progress_val = {1: 0.25, 2: 0.50, 3: 0.75, 4: 1.0}[cur_step]
 st.progress(progress_val)
 st.write("")
 
@@ -1445,7 +1453,6 @@ if cur_step == 1:
 elif cur_step == 2:
     st.subheader("📦 2. Adım: Koli İçi ve Palet Yerleşim Simülasyonu")
     
-    # BELİRGİN DİZİLİM SEÇİM BUTONLARI (Segmented Buttons)
     st.markdown("##### 📍 Görüntülemek İstediğiniz Dizilimi Seçin:")
     btn_koli_col, btn_palet_col, _ = st.columns([1.5, 1.5, 3])
     
@@ -1470,7 +1477,6 @@ elif cur_step == 2:
 
     st.write("")
 
-    # --- GÖRÜNÜM 1: KOLİ İÇİ DİZİLİMİ ---
     if st.session_state["step2_sub_view"] == "koli":
         ck1, ck2, ck3, ck4 = st.columns(4)
         ck1.metric("Koli İç Ölçüleri", f"{int(box_in_l)}x{int(box_in_w)}x{int(box_in_h)} mm")
@@ -1498,7 +1504,6 @@ elif cur_step == 2:
                 fig_3d_box = draw_3d_box_contents(box_in_l, box_in_w, box_in_h, p_length, p_width, p_height, nx, ny, nz)
                 st.plotly_chart(fig_3d_box, use_container_width=True)
 
-    # --- GÖRÜNÜM 2: PALET DİZİLİMİ ---
     else:
         if box_out_l > pallet_dim[0] and box_out_l > pallet_dim[1] and box_out_w > pallet_dim[0] and box_out_w > pallet_dim[1]:
             st.warning("⚠️ **DİKKAT:** Koli boyutları palet taban ölçülerinden büyüktür! Lojistikte paletten taşma (overhang) riski oluşacaktır.")
@@ -1596,9 +1601,114 @@ elif cur_step == 3:
         st.plotly_chart(fig_3d_v, use_container_width=True)
 
     st.write("")
-    col_prev, _, _ = st.columns([1.2, 2.6, 1.2])
+    col_prev, _, col_next = st.columns([1.2, 2.6, 1.2])
     with col_prev:
         st.button("⬅️ 2. Adıma Dön (Dizilimler)", use_container_width=True, on_click=set_step, args=(2,))
+    with col_next:
+        st.button("🔄 4. Adıma Geç (Ortak Koli) ➡️", type="primary", use_container_width=True, on_click=set_step, args=(4,))
+
+# ==============================================================================
+# === EKRAN 4: BENZER EBATLI ÜRÜNLER İÇİN ORTAK KOLİ GELİŞTİRME MODÜLÜ ===
+# ==============================================================================
+elif cur_step == 4:
+    st.subheader("🔄 4. Adım: Benzer Ebatlı Ürünler İçin Ortak Koli & Standardizasyon Analizi")
+    st.info("💡 **Amaç:** Birbirine yakın boyutlardaki ürünler için tek bir ortak koli kalıbı geliştirerek satınalma birim maliyetlerini düşürmek, stok kalemi sayısını azaltmak ve operasyonel verimlilik sağlamak.")
+
+    # Ortak koli için örnek veri seti
+    if "common_products_df" not in st.session_state:
+        st.session_state["common_products_df"] = pd.DataFrame([
+            {"Ürün Adı / SKU": "Ürün A (Standart)", "Boy (mm)": float(p_length), "En (mm)": float(p_width), "Yükseklik (mm)": float(p_height), "Birim Ağırlık (g)": float(p_weight)},
+            {"Ürün Adı / SKU": "Ürün B (Uzun Tip)", "Boy (mm)": float(p_length + 10.0), "En (mm)": float(p_width), "Yükseklik (mm)": float(max(10.0, p_height - 5.0)), "Birim Ağırlık (g)": float(p_weight * 0.95)},
+            {"Ürün Adı / SKU": "Ürün C (Geniş Tip)", "Boy (mm)": float(max(10.0, p_length - 5.0)), "En (mm)": float(p_width + 8.0), "Yükseklik (mm)": float(p_height + 5.0), "Birim Ağırlık (g)": float(p_weight * 1.10)}
+        ])
+
+    st.markdown("##### 1. Ortak Koliye Girecek Ürün Ailesi Parametreleri:")
+    edited_df = st.data_editor(
+        st.session_state["common_products_df"],
+        num_rows="dynamic",
+        use_container_width=True,
+        key="common_box_editor"
+    )
+
+    if not edited_df.empty and len(edited_df) >= 1:
+        # En büyük dış sınırları belirle (Bounding Envelope)
+        max_p_l = float(edited_df["Boy (mm)"].max())
+        max_p_w = float(edited_df["En (mm)"].max())
+        max_p_h = float(edited_df["Yükseklik (mm)"].max())
+        max_p_wt = float(edited_df["Birim Ağırlık (g)"].max())
+
+        col_tol1, col_tol2 = st.columns([1, 1])
+        with col_tol1:
+            clearance_xy = st.slider("Ürünler Arası Emniyet Payı / Boşluk Toleransı (mm)", 2, 12, 4, step=1, help="Ürünlerin koliye rahat girip çıkabilmesi için bırakılan toplam pay.")
+        with col_tol2:
+            common_matrix_str = f"Taban: {nx}x{ny} | Dikey Kat: {nz} (Toplam {total_units_box} Ürün/Koli)"
+            st.text_input("Uygulanan Paketleme Matrisi:", value=common_matrix_str, disabled=True)
+
+        # Ortak Koli İç Ölçüleri
+        common_in_l = (max_p_l * nx) + clearance_xy
+        common_in_w = (max_p_w * ny) + clearance_xy
+        common_in_h = (max_p_h * nz) + clearance_xy
+
+        # Seçili mukavva kalınlığı
+        comm_caliper = active_eval["caliper"]
+        common_out_l = common_in_l + (2 * comm_caliper)
+        common_out_w = common_in_w + (2 * comm_caliper)
+        common_out_h = common_in_h + (3 * comm_caliper)
+
+        common_box_inner_vol_cm3 = (common_in_l * common_in_w * common_in_h) / 1000.0
+
+        st.markdown("##### 2. Geliştirilen Ortak Koli Ebatları:")
+        cb1, cb2, cb3, cb4 = st.columns(4)
+        cb1.metric("Ortak Koli İç Ölçüsü", f"{int(common_in_l)}x{int(common_in_w)}x{int(common_in_h)} mm", "En Kapsayıcı Hacim")
+        cb2.metric("Ortak Koli Dış Ölçüsü", f"{int(common_out_l)}x{int(common_out_w)}x{int(common_out_h)} mm", f"{active_eval['name']}")
+        cb3.metric("Kritik Ürün Brüt Ağırlığı", f"{((max_p_wt * total_units_box) / 1000.0) + (active_eval['gross_koli_kg'] - net_contents_kg):.2f} kg", "En Ağır Varyant")
+        cb4.metric("Koli İç Net Hacim", f"{common_box_inner_vol_cm3 / 1000.0:.2f} L", "Tüm Ürünlere Uygun")
+
+        st.markdown("##### 3. Ürün Bazında Doluluk ve Seperatör / Dolgu İhtiyacı:")
+        comp_rows = []
+        for _, row in edited_df.iterrows():
+            u_name = row["Ürün Adı / SKU"]
+            ul, uw, uh, uwt = float(row["Boy (mm)"]), float(row["En (mm)"]), float(row["Yükseklik (mm)"]), float(row["Birim Ağırlık (g)"])
+            
+            prod_total_vol_cm3 = (ul * uw * uh * total_units_box) / 1000.0
+            fill_pct = (prod_total_vol_cm3 / common_box_inner_vol_cm3) * 100.0 if common_box_inner_vol_cm3 > 0 else 100.0
+            empty_vol_cm3 = max(0.0, common_box_inner_vol_cm3 - prod_total_vol_cm3)
+            
+            x_gap = common_in_l - (ul * nx)
+            y_gap = common_in_w - (uw * ny)
+            z_gap = common_in_h - (uh * nz)
+            
+            if fill_pct >= 94.0:
+                sep_status = "Doğrudan Kullanım (Dolgu Gerekmez)"
+            elif fill_pct >= 85.0:
+                sep_status = f"Hafif Boşluk (+{int(z_gap)}mm Üst / +{int(x_gap)}mm Yan Boşluk)"
+            else:
+                sep_status = f"⚠️ Seperatör / Karton Takoz Zorunlu (Boşluk: %{100-fill_pct:.1f})"
+
+            comp_rows.append({
+                "Ürün Varyantı": u_name,
+                "Birim Boyutlar": f"{int(ul)}x{int(uw)}x{int(uh)} mm",
+                "Koli İçi Doluluk Oranı": f"%{fill_pct:.1f}",
+                "Kalan Boşluk Hacmi": f"{empty_vol_cm3:.0f} cm³",
+                "X / Y / Z Net Boşluklar": f"{int(x_gap)} / {int(y_gap)} / {int(z_gap)} mm",
+                "Dolgu / Seperatör Önerisi": sep_status
+            })
+
+        st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+
+        st.markdown("##### 4. Standardizasyonun Sağladığı Avantajlar:")
+        adv1, adv2, adv3 = st.columns(3)
+        with adv1:
+            st.success("💰 **Satınalma Maliyeti:** Farklı koli kalıpları yerine tek bir ortak kalıptan yüksek tirajlı sipariş verilerek koli birim fiyatında %15-25 tasarruf sağlanır.")
+        with adv2:
+            st.success("📦 **Depolama ve Stok:** Boş koli stok kodları (SKU) teke indirgenir, ambalaj depo alan işgali ve stok takip karmaşası minimize edilir.")
+        with adv3:
+            st.success("🏗️ **Lojistik Standartı:** Tek tip koli ölçüsü sayesinde paletleme ve tır yükleme planları standartlaşır, operasyonel yükleme hızı artar.")
+
+    st.write("")
+    col_prev, _, _ = st.columns([1.2, 2.6, 1.2])
+    with col_prev:
+        st.button("⬅️ 3. Adıma Dön (Araç/Yükleme)", use_container_width=True, on_click=set_step, args=(3,))
 
 # Alt Bilgi (Footer)
 st.divider()
